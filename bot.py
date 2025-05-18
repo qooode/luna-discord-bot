@@ -38,51 +38,49 @@ async def on_ready():
     # Set the bot's activity
     await client.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="@Luna"))
     
-# Add slash commands for controlling Luna's behavior
-@client.tree.command(name="luna_on", description="Enable Luna globally or in the current channel")
-@app_commands.choices(scope=[
-    app_commands.Choice(name="Global - enable everywhere", value="global"),
-    app_commands.Choice(name="Channel - enable only in this channel", value="channel")
+# Natural conversational commands for Luna
+@client.tree.command(name="luna", description="Talk to Luna directly with commands")
+@app_commands.choices(command=[
+    app_commands.Choice(name="listen here", value="listen_here"),
+    app_commands.Choice(name="be quiet here", value="quiet_here"),
+    app_commands.Choice(name="listen everywhere", value="listen_everywhere"),
+    app_commands.Choice(name="be quiet everywhere", value="quiet_everywhere"),
+    app_commands.Choice(name="how are you feeling", value="status")
 ])
-async def luna_on(interaction: discord.Interaction, scope: app_commands.Choice[str]):
-    if scope.value == "global":
-        client.is_globally_enabled = True
-        client.disabled_channels.clear()  # Clear all channel restrictions
-        await interaction.response.send_message("Luna is now active globally and will respond in all channels.", ephemeral=True)
-    else:  # channel scope
-        channel_id = interaction.channel_id
+async def luna_command(interaction: discord.Interaction, command: app_commands.Choice[str]):
+    channel_id = interaction.channel_id
+    
+    if command.value == "listen_here":
+        # Remove this channel from disabled list
         if channel_id in client.disabled_channels:
             client.disabled_channels.remove(channel_id)
-            await interaction.response.send_message("Luna is now active in this channel.", ephemeral=True)
-        else:
-            await interaction.response.send_message("Luna was already active in this channel.", ephemeral=True)
-
-@client.tree.command(name="luna_off", description="Disable Luna globally or in the current channel")
-@app_commands.choices(scope=[
-    app_commands.Choice(name="Global - disable everywhere", value="global"),
-    app_commands.Choice(name="Channel - disable only in this channel", value="channel")
-])
-async def luna_off(interaction: discord.Interaction, scope: app_commands.Choice[str]):
-    if scope.value == "global":
-        client.is_globally_enabled = False
-        await interaction.response.send_message("Luna is now disabled globally and won't respond in any channel.", ephemeral=True)
-    else:  # channel scope
-        channel_id = interaction.channel_id
+        await interaction.response.send_message("Sure, I'll start listening in this channel again! 👋", ephemeral=True)
+        
+    elif command.value == "quiet_here":
+        # Add this channel to disabled list
         client.disabled_channels.add(channel_id)
-        await interaction.response.send_message("Luna is now disabled in this channel.", ephemeral=True)
-
-@client.tree.command(name="luna_status", description="Check Luna's current status")
-async def luna_status(interaction: discord.Interaction):
-    global_status = "enabled" if client.is_globally_enabled else "disabled"
-    channel_status = "enabled" if interaction.channel_id not in client.disabled_channels else "disabled"
-    
-    await interaction.response.send_message(
-        f"Luna's status:\n" 
-        f"- Global: {global_status}\n" 
-        f"- This channel: {channel_status}\n\n" 
-        f"{'I am active in this channel.' if (client.is_globally_enabled and interaction.channel_id not in client.disabled_channels) else 'I am not active in this channel.'}",
-        ephemeral=True
-    )
+        await interaction.response.send_message("Got it, I'll be quiet in this channel for now. 🤐", ephemeral=True)
+        
+    elif command.value == "listen_everywhere":
+        client.is_globally_enabled = True
+        client.disabled_channels.clear()  # Clear all channel restrictions
+        await interaction.response.send_message("I'll start listening in all channels now! 👋", ephemeral=True)
+        
+    elif command.value == "quiet_everywhere":
+        client.is_globally_enabled = False
+        await interaction.response.send_message("I'll be quiet everywhere until you ask me to listen again. 🤐", ephemeral=True)
+        
+    elif command.value == "status":
+        global_status = "listening" if client.is_globally_enabled else "staying quiet"
+        channel_status = "listening" if interaction.channel_id not in client.disabled_channels else "staying quiet"
+        
+        is_active = client.is_globally_enabled and interaction.channel_id not in client.disabled_channels
+        
+        await interaction.response.send_message(
+            f"Hey there! Currently I'm **{global_status}** globally and **{channel_status}** in this channel.\n\n" 
+            f"**{'I can hear you in this channel!' if is_active else 'I cannot hear you in this channel right now.'}**",
+            ephemeral=True
+        )
 
 async def fetch_message_history(channel, current_user_id, limit=25):
     """
@@ -178,7 +176,11 @@ async def on_message(message):
         return
         
     # Check if Luna is enabled for this channel
-    if not client.is_globally_enabled or message.channel.id in client.disabled_channels:
+    channel_id = message.channel.id
+    # If globally disabled OR this specific channel is disabled
+    if not client.is_globally_enabled or channel_id in client.disabled_channels:
+        # For debugging
+        print(f"Luna ignoring message in channel {channel_id} (Global: {client.is_globally_enabled}, Channel in disabled list: {channel_id in client.disabled_channels})")
         return
     
     # Only respond to direct mentions or replies
