@@ -2,6 +2,7 @@ import discord
 import os
 import re
 from dotenv import load_dotenv
+from discord import app_commands
 from ai_handler import get_ai_response
 
 # Load environment variables
@@ -15,16 +16,73 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.messages = True
 
-# Create client instance (using Client instead of Bot for more natural interaction)
-client = discord.Client(intents=intents)
+# Create bot instance with command support
+class LunaBot(discord.Client):
+    def __init__(self):
+        super().__init__(intents=intents)
+        self.tree = app_commands.CommandTree(self)
+        # Settings to track enabled/disabled state
+        self.is_globally_enabled = True
+        self.disabled_channels = set()
+        
+    async def setup_hook(self):
+        # This is called when the bot is ready
+        await self.tree.sync()
+
+# Initialize the bot
+client = LunaBot()
 
 @client.event
 async def on_ready():
     print(f'Luna has connected to Discord!')
     # Set the bot's activity
     await client.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="@Luna"))
+    
+# Add slash commands for controlling Luna's behavior
+@client.tree.command(name="luna_on", description="Enable Luna globally or in the current channel")
+@app_commands.choices(scope=[
+    app_commands.Choice(name="Global - enable everywhere", value="global"),
+    app_commands.Choice(name="Channel - enable only in this channel", value="channel")
+])
+async def luna_on(interaction: discord.Interaction, scope: app_commands.Choice[str]):
+    if scope.value == "global":
+        client.is_globally_enabled = True
+        client.disabled_channels.clear()  # Clear all channel restrictions
+        await interaction.response.send_message("Luna is now active globally and will respond in all channels.", ephemeral=True)
+    else:  # channel scope
+        channel_id = interaction.channel_id
+        if channel_id in client.disabled_channels:
+            client.disabled_channels.remove(channel_id)
+            await interaction.response.send_message("Luna is now active in this channel.", ephemeral=True)
+        else:
+            await interaction.response.send_message("Luna was already active in this channel.", ephemeral=True)
 
-# No commands needed - Luna only responds to mentions and replies for natural conversation
+@client.tree.command(name="luna_off", description="Disable Luna globally or in the current channel")
+@app_commands.choices(scope=[
+    app_commands.Choice(name="Global - disable everywhere", value="global"),
+    app_commands.Choice(name="Channel - disable only in this channel", value="channel")
+])
+async def luna_off(interaction: discord.Interaction, scope: app_commands.Choice[str]):
+    if scope.value == "global":
+        client.is_globally_enabled = False
+        await interaction.response.send_message("Luna is now disabled globally and won't respond in any channel.", ephemeral=True)
+    else:  # channel scope
+        channel_id = interaction.channel_id
+        client.disabled_channels.add(channel_id)
+        await interaction.response.send_message("Luna is now disabled in this channel.", ephemeral=True)
+
+@client.tree.command(name="luna_status", description="Check Luna's current status")
+async def luna_status(interaction: discord.Interaction):
+    global_status = "enabled" if client.is_globally_enabled else "disabled"
+    channel_status = "enabled" if interaction.channel_id not in client.disabled_channels else "disabled"
+    
+    await interaction.response.send_message(
+        f"Luna's status:\n" 
+        f"- Global: {global_status}\n" 
+        f"- This channel: {channel_status}\n\n" 
+        f"{'I am active in this channel.' if (client.is_globally_enabled and interaction.channel_id not in client.disabled_channels) else 'I am not active in this channel.'}",
+        ephemeral=True
+    )
 
 async def fetch_message_history(channel, current_user_id, limit=25):
     """
@@ -118,52 +176,58 @@ async def on_message(message):
     # Don't respond to our own messages
     if message.author == client.user:
         return
+        
+    # Check if Luna is enabled for this channel
+    if not client.is_globally_enabled or message.channel.id in client.disabled_channels:
+        return
     
-    # Check if the bot is mentioned or if the message is a reply to the bot's message
+    # Only respond to direct mentions or replies
     bot_mentioned = client.user.mentioned_in(message)
-    is_reply_to_bot = message.reference and message.reference.resolved and message.reference.resolved.author.id == client.user.id
+    is_reply_to_luna = message.reference and message.reference.resolved and message.reference.resolved.author == client.user
     
-    if bot_mentioned or is_reply_to_bot:
-        # Remove the mention from the message content
-        content = re.sub(f'<@!?{client.user.id}>', '', message.content).strip()
-        
-        # If the message is empty after removing the mention, don't respond
-        if not content:
-            return
-        
-        async with message.channel.typing():
-            try:
-                # Smart context fetching - start with a small batch of well-prioritized messages
-                previous_messages = await fetch_message_history(message.channel, message.author.id)
-                message_count = len(previous_messages)
-                
-                # Only use messages that are actually relevant to this conversation
-                # Filter out system messages and keep the conversation focused
-                filtered_messages = []
-                for msg in previous_messages:
-                    # Skip messages that are just bot commands or system notifications
-                    if msg['content'].startswith('!'): 
-                        continue
-                    # Add all messages from current user or Luna
-                    if msg['is_bot'] or msg['is_current_requester']:
-                        filtered_messages.append(msg)
-                    # Add any message directly part of this conversation thread
-                    elif any(client.user.name in msg['content'] for mentions in msg.get('mentions', [])) or msg.get('is_reply', False):
-                        filtered_messages.append(msg)
-                
-                # If we have a good number of relevant messages, use those; otherwise fall back to all messages
-                if len(filtered_messages) >= 5:
-                    print(f"Filtered to {len(filtered_messages)} highly relevant messages from {message_count} total")
-                    previous_messages = filtered_messages
-                else:
-                    print(f"Using all {message_count} messages for context analysis - limited relevant context found")
-                
-                # Get AI response - Luna will analyze context and decide if online data is needed
-                response = get_ai_response(content, previous_messages=previous_messages)
-                
-                await send_long_message(message.channel, response, message)
-            except Exception as e:
-                await message.reply(f"❌ Error: {str(e)}")
+    if not (bot_mentioned or is_reply_to_luna):
+        return
+    
+    # Remove the mention from the content if it exists
+    content = re.sub(f'<@!?{client.user.id}>', '', message.content).strip()
+    
+    # If the message is empty after removing the mention, don't respond
+    if not content:
+        return
+    
+    async with message.channel.typing():
+        try:
+            # Smart context fetching - start with a small batch of well-prioritized messages
+            previous_messages = await fetch_message_history(message.channel, message.author.id)
+            message_count = len(previous_messages)
+            
+            # Only use messages that are actually relevant to this conversation
+            # Filter out system messages and keep the conversation focused
+            filtered_messages = []
+            for msg in previous_messages:
+                # Skip messages that are just bot commands or system notifications
+                if msg['content'].startswith('!') or msg['content'].startswith('/'): 
+                    continue
+                # Add all messages from current user or Luna
+                if msg['is_bot'] or msg['is_current_requester']:
+                    filtered_messages.append(msg)
+                # Add any message directly part of this conversation thread
+                elif any(client.user.name in msg['content'] for mentions in msg.get('mentions', [])) or msg.get('is_reply', False):
+                    filtered_messages.append(msg)
+            
+            # If we have a good number of relevant messages, use those; otherwise fall back to all messages
+            if len(filtered_messages) >= 5:
+                print(f"Filtered to {len(filtered_messages)} highly relevant messages from {message_count} total")
+                previous_messages = filtered_messages
+            else:
+                print(f"Using all {message_count} messages for context analysis - limited relevant context found")
+            
+            # Get AI response - Luna will analyze context and decide if online data is needed
+            response = get_ai_response(content, previous_messages=previous_messages)
+            
+            await send_long_message(message.channel, response, message)
+        except Exception as e:
+            await message.reply(f"❌ Error: {str(e)}")
 
 async def send_long_message(message_channel, text, reference_message):
     MAX_LENGTH = 2000
