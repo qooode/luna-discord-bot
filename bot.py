@@ -26,19 +26,45 @@ async def on_ready():
 
 # No commands needed - Luna only responds to mentions and replies for natural conversation
 
-async def fetch_message_history(channel, current_user_id, limit=100):
+async def fetch_message_history(channel, current_user_id, limit=25):
     """
     Fetch recent messages from a channel and format them for context analysis.
     Returns a list of message dictionaries with content and metadata.
     
     Messages are returned in chronological order (oldest first), which is
     better for establishing conversational context.
+    
+    Default limit is 25 messages for performance.
+    Prioritizes relevant conversation threads involving Luna and the current user.
     """
     try:
         # First collect messages in reverse order (newest first)
         raw_messages = []
+        
+        # First pass: get recent messages to analyze
         async for msg in channel.history(limit=limit):
             raw_messages.append(msg)
+            
+        # Prioritize messages that are part of conversations with the bot or from current user
+        relevant_messages = []
+        
+        for msg in raw_messages:
+            # Always include bot messages
+            if msg.author.id == client.user.id:
+                relevant_messages.append(msg)
+            # Always include current user's messages
+            elif msg.author.id == current_user_id:
+                relevant_messages.append(msg)
+            # Include messages that mention the bot
+            elif client.user.mentioned_in(msg):
+                relevant_messages.append(msg)
+            # Include replies to the bot
+            elif msg.reference and msg.reference.resolved and msg.reference.resolved.author.id == client.user.id:
+                relevant_messages.append(msg)
+        
+        # If we have enough relevant messages, use only those; otherwise use all collected messages
+        if len(relevant_messages) >= 10:
+            raw_messages = relevant_messages
         
         # Convert to chronological order (oldest first) for better context analysis
         raw_messages.reverse()
@@ -107,10 +133,30 @@ async def on_message(message):
         
         async with message.channel.typing():
             try:
-                # Fetch recent message history for context (up to 100 messages)
-                # Pass the current user's ID so we can mark their messages specially
+                # Smart context fetching - start with a small batch of well-prioritized messages
                 previous_messages = await fetch_message_history(message.channel, message.author.id)
-                print(f"Fetched {len(previous_messages)} messages for context analysis")
+                message_count = len(previous_messages)
+                
+                # Only use messages that are actually relevant to this conversation
+                # Filter out system messages and keep the conversation focused
+                filtered_messages = []
+                for msg in previous_messages:
+                    # Skip messages that are just bot commands or system notifications
+                    if msg['content'].startswith('!'): 
+                        continue
+                    # Add all messages from current user or Luna
+                    if msg['is_bot'] or msg['is_current_requester']:
+                        filtered_messages.append(msg)
+                    # Add any message directly part of this conversation thread
+                    elif any(client.user.name in msg['content'] for mentions in msg.get('mentions', [])) or msg.get('is_reply', False):
+                        filtered_messages.append(msg)
+                
+                # If we have a good number of relevant messages, use those; otherwise fall back to all messages
+                if len(filtered_messages) >= 5:
+                    print(f"Filtered to {len(filtered_messages)} highly relevant messages from {message_count} total")
+                    previous_messages = filtered_messages
+                else:
+                    print(f"Using all {message_count} messages for context analysis - limited relevant context found")
                 
                 # Get AI response - Luna will analyze context and decide if online data is needed
                 response = get_ai_response(content, previous_messages=previous_messages)
