@@ -106,9 +106,6 @@ async def on_message(message):
             return
         
         async with message.channel.typing():
-            # Let user know we're processing
-            thinking_msg = await message.channel.send("thinking...")
-            
             try:
                 # Fetch recent message history for context (up to 100 messages)
                 # Pass the current user's ID so we can mark their messages specially
@@ -118,14 +115,8 @@ async def on_message(message):
                 # Get AI response - Luna will analyze context and decide if online data is needed
                 response = get_ai_response(content, previous_messages=previous_messages)
                 
-                await thinking_msg.delete()
                 await send_long_message(message.channel, response, message)
             except Exception as e:
-                if 'thinking_msg' in locals() and thinking_msg: # Ensure thinking_msg exists before trying to delete
-                    try:
-                        await thinking_msg.delete()
-                    except discord.errors.NotFound:
-                        pass # Message might have already been deleted or never sent
                 await message.reply(f"❌ Error: {str(e)}")
 
 async def send_long_message(message_channel, text, reference_message):
