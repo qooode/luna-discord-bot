@@ -593,7 +593,7 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             f"4. NEVER include placeholder URLs (like 'XXXXX' or example.com) under ANY circumstance\n"
             f"5. For product recommendations: ONLY link to official product pages, reputable review sites, or major retailers\n"
             f"6. Double-check that any URL you provide contains real domain names (.com, .org, etc.) that actually exist\n\n"
-            f"FORMAT LINKS PROPERLY FOR DISCORD EMBEDDING: Put URLs on their own line like this:\n\nhttps://www.youtube.com/watch?v=wJO_vIDZn-I\n\nOR use proper markdown format: [Link text](https://example.com)\n\n"
+            f"FORMAT LINKS PROPERLY FOR DISCORD EMBEDDING (These are *format examples only*. DO NOT use these example URLs in your actual response. Only use URLs found in search results.):\n\nExample 1 (URL on its own line):\nhttps://www.youtube.com/watch?v=ACTUAL_VIDEO_ID_FROM_SEARCH\n\nExample 2 (Markdown format):\n[Relevant Link Text](https://example.com/ACTUAL_PAGE_FROM_SEARCH)\n\n"
             f"REMEMBER: It is better to provide NO LINK than a fake or broken link. Only share URLs you find directly in the search results.\n\n"
             f"Specific content types that should include links when available:\n"
             f"- Product pages and specifications\n"
@@ -760,7 +760,7 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
                 f"- News articles\n"
                 f"- Game information\n"
                 f"- Reference materials of any kind\n\n"
-                f"FORMAT LINKS PROPERLY FOR DISCORD EMBEDDING: Put URLs on their own line like this:\n\nhttps://www.youtube.com/watch?v=wJO_vIDZn-I\n\nOR use proper markdown format: [Link text](https://example.com)\n\n"
+                f"FORMAT LINKS PROPERLY FOR DISCORD EMBEDDING (These are *format examples only*. DO NOT use these example URLs in your actual response. Only use URLs found in search results.):\n\nExample 1 (URL on its own line):\nhttps://www.youtube.com/watch?v=ACTUAL_VIDEO_ID_FROM_SEARCH\n\nExample 2 (Markdown format):\n[Relevant Link Text](https://example.com/ACTUAL_PAGE_FROM_SEARCH)\n\n"
                 f"CRITICAL: NEVER use placeholder URLs with 'XXXXX' - ONLY use REAL, complete URLs.\n\n"
                 f"If you need to find a link for something discussed in the conversation, suggest the user search for specific terms, but be as helpful as possible by providing direct links when you know them."
             )
