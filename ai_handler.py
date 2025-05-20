@@ -389,11 +389,8 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
 
         # Step 1b: Perplexity gathers raw data for each specific query
         data_gathering_model = "perplexity/llama-3.1-sonar-small-128k-online" # User's preferred model
-        data_gathering_system_prompt_template = (
-            "You are an efficient, factual web search assistant. Your task is to gather raw, relevant, and up-to-date "
-            "information from the internet based on the VERY SPECIFIC search query: '{search_query}'. Present the key facts, data points, and summaries concisely. "
-            "Do not add any interpretation, opinion, or conversational filler. Just provide the extracted information as directly as possible for this specific query."
-        )
+        # Extremely simple prompt - just a reminder to include links
+        data_gathering_system_prompt_template = "Find information and include working URLs for: {search_query}"
         
         all_gathered_information_parts = []
         for i, specific_query_text in enumerate(specific_search_queries):
