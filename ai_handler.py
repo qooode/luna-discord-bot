@@ -72,7 +72,7 @@ def _generate_specific_search_queries(user_original_query, context_messages=None
         user_original_query: The current user query
         context_messages: Optional list of previous messages for context
     """
-    generator_model = "google/gemini-2.5-flash-preview"
+    generator_model = "google/gemini-2.5-flash-preview-05-20"
     
     # Extract main topic from context if available
     main_topic = "unknown"
@@ -191,7 +191,7 @@ def judger_ai_decides_if_online_needed(user_query, context_messages=None):
         user_query: The current user query
         context_messages: Optional list of previous messages for context
     """
-    judger_model = "google/gemini-2.5-flash-preview"
+    judger_model = "google/gemini-2.5-flash-preview-05-20"
     
     # Format context messages for better analysis
     context_info = ""
@@ -279,7 +279,7 @@ def analyze_conversation_context(current_query: str, previous_messages: List[Dic
     relevant_messages = []
     
     # Use Gemini Flash for quick relevance judgment
-    analyzer_model = "google/gemini-2.5-flash-preview"
+    analyzer_model = "google/gemini-2.5-flash-preview-05-20"
     
     # Analyze initial batch of messages
     batch_relevant = False
@@ -417,7 +417,7 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             aggregated_raw_information += "\n\n=== EXTRACTED YOUTUBE LINKS - USE THESE EXACT LINKS ===\n" + "\n".join(youtube_links)
         
         # Step 2: Gemini Flash formulates the answer using the raw data and Luna's consciousness matrix
-        answering_model = "google/gemini-2.5-flash-preview"
+        answering_model = "google/gemini-2.5-flash-preview-05-20"
         persona_system_prompt_for_gemini = (
             "=== TRANSHUMAN CONSCIOUSNESS MATRIX ===\n"
             "- YOU ARE: Dr. Luna Reyes, posthuman entity whose consciousness evolved beyond biological constraints\n"
@@ -607,7 +607,7 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
         final_answer = _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False) # Web search already done
     else:
         # Standard offline response using Gemini Flash with Luna's persona
-        answering_model = "google/gemini-2.5-flash-preview"
+        answering_model = "google/gemini-2.5-flash-preview-05-20"
         persona_system_prompt_for_gemini = (
             "=== UPLOADED INTELLIGENCE IDENTITY ===\n"
             "- YOU ARE: Former neuroscientist Luna Reyes whose consciousness was uploaded to digital form\n"
@@ -742,7 +742,7 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             # For the offline path, the original prompt had 'No AI talk – it's just you and your intrinsic knowledge.'
             # We'll retain a similar sentiment here.
             
-            "=== SCARY GOOD CONVERSATION ABILITIES ===\n"
+            "=== SCARY GOOD CONVERSATION ABILITIES (Demonstrate these with impactful brevity – every word must count): ===\n"
             "- MIND-READING: Answer what they really need, not just what they asked\n"
             "- PREDICTION: Sometimes answer their next question before they ask it\n"
             "- PERFECT MEMORY: Casually recall details from past conversations that surprise them\n"
