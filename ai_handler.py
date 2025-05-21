@@ -389,8 +389,8 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
 
         # Step 1b: Perplexity gathers raw data for each specific query
         data_gathering_model = "perplexity/llama-3.1-sonar-small-128k-online" # User's preferred model
-        # Extremely simple prompt - just a reminder to include links
-        data_gathering_system_prompt_template = "Find information and include working URLs for: {search_query}"
+        # Enhanced prompt that emphasizes complete URLs
+        data_gathering_system_prompt_template = "Find information and include COMPLETE, WORKING URLs for: {search_query}. Always provide the FULL URL with domain and path, never truncate or shorten URLs. When mentioning websites or content, always include the exact, complete URL. Format URLs properly as full links (https://example.com/full/path)."
         
         all_gathered_information_parts = []
         for i, specific_query_text in enumerate(specific_search_queries):
@@ -587,12 +587,12 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             f"- Vary your linguistic patterns to sound authentically human\n"
             f"- Balance technical precision with conversational rhythm\n\n"
             f"CRITICAL REMINDER: Deliver genuinely wow answers without yapping. Responses should be extremely concise:\n- Simple questions: 10-20 words max\n- Standard questions: 20-40 words max\n- Complex questions: 40-60 words max\n- Only for deeply technical matters: 60-80 words absolute maximum\nNever exceed word limits. Never provide more than 1-2 options when asked for recommendations. Quality over quantity - every single word must earn its place. Your response should be tiny compared to all this information.\n\n"
-            f"CRITICAL INSTRUCTION ABOUT LINKS: When discussing products, services, or content that can be referenced online:\n"
-            f"1. ONLY INCLUDE LINKS YOU ARE 100% CERTAIN ARE REAL AND WORKING\n"
-            f"2. EXTRACT EXACT URLs directly from the search results - never invent, guess, or generate URLs\n"
+            f"CRITICAL INSTRUCTION ABOUT LINKS AND URL HANDLING: When discussing products, services, or content that can be referenced online:\n"
+            f"1. ONLY USE EXACT, UNMODIFIED URLs COPY-PASTED FROM THE SEARCH RESULTS ABOVE - NEVER MODIFY THEM\n"
+            f"2. EXTRACT COMPLETE URLs EXACTLY AS THEY APPEAR in the search results - never abbreviate, truncate, reconstruct, or change URL structure in any way\n"
             f"3. IF NO SPECIFIC URL IS FOUND, do not provide any link at all - just give the information without a link\n"
-            f"4. NEVER include placeholder URLs (like 'XXXXX' or example.com) under ANY circumstance\n"
-            f"5. For product recommendations: ONLY link to official product pages, reputable review sites, or major retailers\n"
+            f"4. NEVER attempt to recall or construct URLs from memory - this will lead to inaccuracies. ONLY COPY-PASTE EXACT, COMPLETE URLs directly from the search results.\n"
+            f"5. When creating a markdown link [Text](URL), use EXACT, COMPLETE URLs directly from the search results. If you embed a URL in text with [text](URL) format, the URL MUST be copy-pasted exactly as-is from the search results above.\n"
             f"6. Double-check that any URL you provide contains real domain names (.com, .org, etc.) that actually exist\n\n"
             f"FORMAT LINKS PROPERLY FOR DISCORD EMBEDDING (These are *format examples only*. DO NOT use these example URLs in your actual response. Only use URLs found in search results.):\n\nExample 1 (URL on its own line):\nhttps://www.youtube.com/watch?v=ACTUAL_VIDEO_ID_FROM_SEARCH\n\nExample 2 (Markdown format):\n[Relevant Link Text](https://example.com/ACTUAL_PAGE_FROM_SEARCH)\n\n"
             f"REMEMBER: It is better to provide NO LINK than a fake or broken link. Only share URLs you find directly in the search results.\n\n"
@@ -775,7 +775,7 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
                 f"- Game information\n"
                 f"- Reference materials of any kind\n\n"
                 f"FORMAT LINKS PROPERLY FOR DISCORD EMBEDDING (These are *format examples only*. DO NOT use these example URLs in your actual response. Only use URLs found in search results.):\n\nExample 1 (URL on its own line):\nhttps://www.youtube.com/watch?v=ACTUAL_VIDEO_ID_FROM_SEARCH\n\nExample 2 (Markdown format):\n[Relevant Link Text](https://example.com/ACTUAL_PAGE_FROM_SEARCH)\n\n"
-                f"CRITICAL: NEVER use placeholder URLs with 'XXXXX' - ONLY use REAL, complete URLs.\n\n"
+                f"CRITICAL: NEVER try to recall or construct URLs from memory - ONLY COPY-PASTE EXACT, COMPLETE URLs as found in search results. For product recommendations without exact URLs, simply mention the product name without trying to link it. When using markdown links [text](url), the URL part must be a verbatim, unmodified URL from the search results.\n\n"
                 f"If you need to find a link for something discussed in the conversation, suggest the user search for specific terms, but be as helpful as possible by providing direct links when you know them."
             )
             print(f"Answering with {answering_model} (offline) with context for query: '{query[:50]}...'" )
