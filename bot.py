@@ -4,6 +4,7 @@ import re
 from dotenv import load_dotenv
 from discord import app_commands
 from ai_handler import get_ai_response
+from link_handler import handle_links
 
 # Load environment variables
 load_dotenv()
@@ -187,6 +188,9 @@ async def on_message(message):
     # Don't respond to our own messages
     if message.author == client.user:
         return
+    
+    # First, check for x.com or twitter.com links
+    await handle_links(message)
         
     # Check if Luna is enabled for this channel
     channel_id = message.channel.id
