@@ -6,8 +6,8 @@ X_PATTERN = re.compile(r'https?://(www\.)?(x|twitter)\.com/\S+')
 
 async def handle_links(message):
     """
-    Detect x.com or twitter.com links in messages and post fxtwitter.com versions
-    without deleting the original message so people can still reply to the user.
+    Detect x.com or twitter.com links in messages and post fxtwitter.com versions.
+    Keeps the original message but suppresses its embeds so people can still reply to the user.
     """
     # Don't process messages from bots (including self)
     if message.author.bot:
@@ -43,10 +43,13 @@ async def handle_links(message):
         for new_link in new_links:
             new_message += f"{new_link}\n"
         
-        # Send the new message without deleting the original
+        # Suppress embeds in the original message
+        await message.edit(suppress=True)
+        
+        # Send the new message with the fxtwitter links
         await message.channel.send(new_message)
         
-        print(f"Posted {len(new_links)} fxtwitter links for {message.author.display_name}'s message")
+        print(f"Posted {len(new_links)} fxtwitter links for {message.author.display_name}'s message and suppressed original embeds")
         
     except Exception as e:
         print(f"Error in link_handler: {str(e)}") 
