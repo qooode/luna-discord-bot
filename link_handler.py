@@ -11,15 +11,15 @@ LINK_PATTERNS = [
 REPLACEMENTS = {
     "x.com": "fxtwitter.com",
     "twitter.com": "fxtwitter.com",
-    "reddit.com": "rxddit.com",
-    "tiktok.com": "tnktok.com",
-    "vm.tiktok.com": "tnktok.com" # Handle short TikTok links
+    "reddit.com": "redditez.com",
+    "tiktok.com": "tiktokez.com",
+    "vm.tiktok.com": "tiktokez.com" # Handle short TikTok links
 }
 
 async def handle_links(message):
     """
     Detect x.com, twitter.com, reddit.com, or tiktok.com links in messages 
-    and post enhanced versions (e.g., fxtwitter, rxddit, tnktok).
+    and post enhanced versions (e.g., fxtwitter, redditez, tiktokez).
     Keeps the original message but suppresses its embeds so people can still reply to the user.
     """
     # Don't process messages from bots (including self)
