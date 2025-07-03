@@ -60,7 +60,16 @@ class TempChannelManager:
         while True:
             try:
                 await self.cleanup_expired_channels()
-                await self.update_channel_timers()
+                # Update timers less frequently to avoid rate limits
+                if hasattr(self, '_timer_counter'):
+                    self._timer_counter += 1
+                else:
+                    self._timer_counter = 1
+                
+                # Update channel names every 5 minutes, but cleanup every minute
+                if self._timer_counter % 5 == 0:
+                    await self.update_channel_timers()
+                
                 await asyncio.sleep(60)  # Check every minute
             except Exception as e:
                 print(f"Error in cleanup loop: {e}")
@@ -165,24 +174,77 @@ class TempChannelManager:
                 else:  # Under 1 hour: show minutes
                     timer_display = f"{total_minutes}m"
                 
-                # Check if extended
-                is_extended = data.get('extended', False)
-                extended_suffix = "-extended" if is_extended else ""
+                # Create new channel name (no extended suffix)
+                new_name = f"⏰・{clean_topic}-{timer_display}"
                 
-                # Create new channel name
-                new_name = f"⏰・{clean_topic}-{timer_display}{extended_suffix}"
-                
-                # Only update if name changed
+                # Only update if name changed and avoid rate limits
                 if channel.name != new_name:
                     try:
                         await channel.edit(name=new_name)
                         print(f"Updated channel timer: {new_name}")
-                    except discord.HTTPException:
+                        # Add small delay to avoid rate limits
+                        await asyncio.sleep(1)
+                    except discord.HTTPException as e:
                         # Rate limited or permission issues
+                        print(f"Failed to update channel name: {e}")
                         pass
                         
             except Exception as e:
                 print(f"Error updating timer for channel {channel_id}: {e}")
+    
+    async def update_single_channel_timer(self, channel_id: int):
+        """Update timer for a single channel (used after extension)"""
+        if channel_id not in self.temp_channels:
+            return
+            
+        try:
+            channel = self.bot.get_channel(channel_id)
+            if not channel:
+                return
+            
+            data = self.temp_channels[channel_id]
+            now = datetime.now()
+            
+            # Calculate time remaining
+            time_left = data['expires_at'] - now
+            if time_left.total_seconds() <= 0:
+                return
+            
+            # Get the base topic (without timer)
+            clean_topic = data['topic'].replace(' ', '-').lower()
+            
+            # Calculate smart timer display
+            total_minutes = int(time_left.total_seconds() / 60)
+            hours = total_minutes // 60
+            minutes = total_minutes % 60
+            
+            # Smart timer logic
+            if total_minutes >= 120:  # 2+ hours: show only hours
+                if hours >= 24:
+                    timer_display = f"{hours//24}d"
+                else:
+                    timer_display = f"{hours}h"
+            elif total_minutes >= 60:  # 1-2 hours: show hours and minutes if minutes > 0
+                if minutes > 0:
+                    timer_display = f"{hours}h{minutes}m"
+                else:
+                    timer_display = f"{hours}h"
+            else:  # Under 1 hour: show minutes
+                timer_display = f"{total_minutes}m"
+            
+            # Create new channel name (no extended suffix)
+            new_name = f"⏰・{clean_topic}-{timer_display}"
+            
+            # Update channel name
+            if channel.name != new_name:
+                try:
+                    await channel.edit(name=new_name)
+                    print(f"Updated extended channel timer: {new_name}")
+                except discord.HTTPException as e:
+                    print(f"Failed to update extended channel name: {e}")
+                    
+        except Exception as e:
+            print(f"Error updating single channel timer: {e}")
     
     async def delete_temp_channel(self, channel_id: int, reason: str):
         """Delete a temp channel with a reason"""
@@ -276,6 +338,9 @@ class TempChannelManager:
         if channel_id in self.warned_channels:
             self.warned_channels.remove(channel_id)
         
+        # Force immediate timer update for this channel
+        await self.update_single_channel_timer(channel_id)
+        
         # Update channel topic to show extension
         channel = self.bot.get_channel(channel_id)
         if channel:
@@ -351,12 +416,17 @@ class TempChannelManager:
             clean_topic = topic.replace(' ', '-').lower()
             channel_name = f"⏰・{clean_topic}-{duration}"
             
-            # Set up permissions
-            overwrites = {
-                guild.default_role: discord.PermissionOverwrite(read_messages=channel_type == 'public'),
-                creator: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_messages=True),
-                self.bot.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_messages=True, manage_channels=True)
-            }
+            # Start with category permissions (inherit category overwrites)
+            overwrites = {}
+            if category:
+                # Copy all category permissions
+                for target, overwrite in category.overwrites.items():
+                    overwrites[target] = overwrite
+            
+            # Add/override specific permissions for temp channels
+            overwrites[guild.default_role] = discord.PermissionOverwrite(read_messages=channel_type == 'public')
+            overwrites[creator] = discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_messages=True)
+            overwrites[self.bot.user] = discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_messages=True, manage_channels=True)
             
             # Create the channel
             expires_at = datetime.now() + duration_delta
