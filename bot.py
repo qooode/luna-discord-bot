@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from discord import app_commands
 from ai_handler import get_ai_response
 from link_handler import handle_links
+from temp_channels import TempChannelManager
 
 # Load environment variables
 load_dotenv()
@@ -27,6 +28,8 @@ class LunaBot(discord.Client):
         self.disabled_channels = set()
         # Channels that should be enabled even if global is off
         self.always_enabled_channels = set()
+        # Temp channel manager
+        self.temp_channel_manager = TempChannelManager(self)
         
     async def setup_hook(self):
         # This is called when the bot is ready
@@ -40,6 +43,8 @@ async def on_ready():
     print(f'Luna has connected to Discord!')
     # Set the bot's activity
     await client.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="@Luna"))
+    # Start temp channel cleanup task
+    client.temp_channel_manager.start_cleanup_task()
     
 # Natural conversational commands for Luna
 @client.tree.command(name="luna", description="Talk to Luna directly with commands")
@@ -153,6 +158,71 @@ async def summarize_command(interaction: discord.Interaction, count: int = 100):
         
     except Exception as e:
         await interaction.followup.send(f"❌ Error creating summary: {str(e)}", ephemeral=True)
+
+# Temp Channel Commands
+@client.tree.command(name="temp", description="Create a temporary channel")
+@app_commands.describe(
+    topic="What's the channel for? (e.g., 'debug session', 'planning meeting')",
+    type="Channel visibility",
+    duration="How long should the channel last?"
+)
+@app_commands.choices(
+    type=[
+        app_commands.Choice(name="public", value="public"),
+        app_commands.Choice(name="private", value="private")
+    ],
+    duration=[
+        app_commands.Choice(name="15 minutes", value="15min"),
+        app_commands.Choice(name="30 minutes", value="30min"),
+        app_commands.Choice(name="1 hour", value="1h"),
+        app_commands.Choice(name="2 hours", value="2h"),
+        app_commands.Choice(name="6 hours", value="6h"),
+        app_commands.Choice(name="12 hours", value="12h"),
+        app_commands.Choice(name="24 hours", value="24h")
+    ]
+)
+async def temp_command(interaction: discord.Interaction, topic: str, type: app_commands.Choice[str], duration: app_commands.Choice[str]):
+    await interaction.response.defer()
+    
+    channel, error = await client.temp_channel_manager.create_temp_channel(
+        interaction.guild, interaction.user, topic, type.value, duration.value
+    )
+    
+    if error:
+        await interaction.followup.send(error, ephemeral=True)
+    else:
+        await interaction.followup.send(f"✅ Created temp channel: {channel.mention}", ephemeral=True)
+
+@client.tree.command(name="invite", description="Invite someone to your private temp channel")
+@app_commands.describe(user="User to invite to this channel")
+async def invite_command(interaction: discord.Interaction, user: discord.Member):
+    if not isinstance(interaction.channel, discord.TextChannel):
+        await interaction.response.send_message("❌ This command only works in text channels!", ephemeral=True)
+        return
+    
+    result = await client.temp_channel_manager.invite_user_to_channel(
+        interaction.channel.id, interaction.user.id, user
+    )
+    
+    await interaction.response.send_message(result, ephemeral=True)
+
+@client.tree.command(name="tempclose", description="Close your temp channel")
+async def tempclose_command(interaction: discord.Interaction):
+    if not isinstance(interaction.channel, discord.TextChannel):
+        await interaction.response.send_message("❌ This command only works in text channels!", ephemeral=True)
+        return
+    
+    result = await client.temp_channel_manager.close_channel(interaction.channel.id, interaction.user.id)
+    
+    if result == "✅ Channel closed!":
+        await interaction.response.send_message(result)
+    else:
+        await interaction.response.send_message(result, ephemeral=True)
+
+@client.tree.command(name="templist", description="List your temp channels")
+async def templist_command(interaction: discord.Interaction):
+    channel_list = client.temp_channel_manager.get_user_channel_list(interaction.user.id)
+    await interaction.response.send_message(f"**Your temp channels:**\n{channel_list}", ephemeral=True)
 
 class SummaryView(discord.ui.View):
     def __init__(self, pages, message_count):
@@ -361,6 +431,10 @@ async def on_message(message):
     if message.author == client.user:
         return
     
+    # Update temp channel activity if this is a temp channel
+    if isinstance(message.channel, discord.TextChannel):
+        await client.temp_channel_manager.update_channel_activity(message.channel.id)
+    
     # First, check for x.com or twitter.com links
     await handle_links(message)
         
@@ -431,6 +505,35 @@ async def on_message(message):
             await send_long_message(message.channel, response, message)
         except Exception as e:
             await message.reply(f"❌ Error: {str(e)}")
+
+@client.event
+async def on_reaction_add(reaction, user):
+    """Handle reactions for temp channel extensions"""
+    # Don't respond to bot reactions
+    if user.bot:
+        return
+    
+    # Check if this is a temp channel extension reaction
+    if str(reaction.emoji) == "⏰" and isinstance(reaction.message.channel, discord.TextChannel):
+        channel_id = reaction.message.channel.id
+        
+        # Check if this is a temp channel and the reaction is on a warning message
+        if channel_id in client.temp_channel_manager.temp_channels:
+            channel_data = client.temp_channel_manager.temp_channels[channel_id]
+            warning_message_id = channel_data.get('warning_message_id')
+            
+            # Only process if this is the warning message and user is the creator
+            if warning_message_id == reaction.message.id and channel_data['creator_id'] == user.id:
+                result = await client.temp_channel_manager.extend_channel(channel_id, user.id)
+                
+                # Send confirmation message
+                await reaction.message.channel.send(f"{user.mention} {result}")
+                
+                # Remove the warning message
+                try:
+                    await reaction.message.delete()
+                except:
+                    pass
 
 async def send_long_message(message_channel, text, reference_message):
     MAX_LENGTH = 2000
