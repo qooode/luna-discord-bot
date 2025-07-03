@@ -96,6 +96,84 @@ async def luna_command(interaction: discord.Interaction, command: app_commands.C
             ephemeral=True
         )
 
+@client.tree.command(name="summarize", description="Get a human-tone summary of recent messages")
+@app_commands.describe(
+    count="Number of messages to summarize (default: 100, max: 500)"
+)
+async def summarize_command(interaction: discord.Interaction, count: int = 100):
+    # Clamp count to reasonable limits
+    count = min(max(count, 10), 500)
+    
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        # Fetch messages from the channel
+        messages = []
+        async for message in interaction.channel.history(limit=count):
+            if message.author == client.user:
+                continue  # Skip Luna's own messages
+            if message.content.startswith('/') or message.content.startswith('!'):
+                continue  # Skip command messages
+            if not message.content.strip():
+                continue  # Skip empty messages
+            
+            messages.append({
+                'author': message.author.display_name,
+                'content': message.content,
+                'timestamp': message.created_at.isoformat()
+            })
+        
+        if not messages:
+            await interaction.followup.send("No messages found to summarize in this channel.", ephemeral=True)
+            return
+        
+        # Reverse to chronological order
+        messages.reverse()
+        
+        # Create summary using AI
+        summary = await create_message_summary(messages, count)
+        
+        # Send the summary
+        await interaction.followup.send(f"**Summary of last {len(messages)} messages:**\n\n{summary}")
+        
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error creating summary: {str(e)}", ephemeral=True)
+
+async def create_message_summary(messages, original_count):
+    """Create a human-tone summary of messages focusing on topics and key participants."""
+    from ai_handler import _call_openrouter
+    
+    # Format messages for AI processing
+    message_text = ""
+    for msg in messages:
+        message_text += f"{msg['author']}: {msg['content']}\n"
+    
+    system_prompt = """You are Luna, creating a natural conversation summary. Your job is to capture the essence of what people talked about, not list every detail.
+
+Focus on:
+- Main topics discussed (what were people actually talking about?)
+- Key participants and their contributions
+- Important decisions or conclusions
+- Notable moments or discussions
+
+Write in a conversational, human tone. No formal structure or bullet points. Make it feel like you're telling a friend what happened in the chat. Keep it concise but capture the interesting stuff.
+
+Don't mention every person who said something minor. Focus on the actual substance and flow of conversation.
+
+Example style: "So basically everyone was discussing the new game update, with Jake being super excited about the new features while Sarah was more skeptical about the changes. Then the conversation shifted to weekend plans where most people seemed interested in the movie night idea Tom suggested."
+
+Keep it under 200 words max. Be natural and conversational."""
+    
+    user_prompt = f"Here are {len(messages)} messages from a Discord channel. Give me a natural, human-tone summary:\n\n{message_text}"
+    
+    summary = _call_openrouter(
+        "google/gemini-2.5-flash-preview-05-20",
+        system_prompt,
+        user_prompt
+    )
+    
+    return summary
+
 async def fetch_message_history(channel, current_user_id, limit=25):
     """
     Fetch recent messages from a channel and format them for context analysis.
