@@ -245,18 +245,20 @@ async def create_message_summary(messages, original_count, channel):
     oldest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{oldest_message['message_id']}" if oldest_message else ""
     newest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{newest_message['message_id']}" if newest_message else ""
     
-    system_prompt = """Create bullet point summary. One line per topic.
+    system_prompt = """Create bullet point summary. MUST BE UNDER 800 CHARACTERS TOTAL. 1-2 minute read.
 
 Format:
-• Name did/said something specific [MESSAGE_ID]
+• Name did something [MESSAGE_ID]
 
-Use exact message IDs. Keep each bullet ONE LINE. No essays. No explanations."""
+Use exact message IDs. ONE LINE per bullet. MAX 800 CHARS OR IT FAILS."""
     
     user_prompt = f"""Messages with IDs for linking:
 
 {message_text}
 
-Create bullet points using the exact message IDs from above. Format: • Name did something [MESSAGE_ID]"""
+Create bullet points using exact message IDs. Format: • Name did something [MESSAGE_ID]
+
+CRITICAL: UNDER 800 CHARACTERS TOTAL INCLUDING ALL BULLETS."""
     
     summary = _call_openrouter(
         "google/gemini-2.5-flash-preview-05-20",
