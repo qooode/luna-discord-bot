@@ -353,22 +353,28 @@ class TempChannelManager:
                 del self.temp_channels[channel_id]['inactivity_warned']
             # Don't save on every message - let the cleanup task handle it
     
-    async def close_channel(self, channel_id: int, user_id: int) -> str:
+    async def close_channel(self, channel_id: int, user_id: int):
         """Close a temp channel manually"""
         if channel_id not in self.temp_channels:
-            return "❌ This is not a temp channel!"
+            return False, "❌ This is not a temp channel!"
         
         channel_data = self.temp_channels[channel_id]
         
         # Check if user is the creator
         if channel_data['creator_id'] != user_id:
-            return "❌ Only the channel creator can close the channel!"
+            return False, "❌ Only the channel creator can close the channel!"
         
+        # Delete the channel
         await self.delete_temp_channel(channel_id, "Channel closed by creator")
-        del self.temp_channels[channel_id]
-        self.save_data()
         
-        return "✅ Channel closed!"
+        # Clean up tracking data
+        if channel_id in self.temp_channels:
+            del self.temp_channels[channel_id]
+        if channel_id in self.warned_channels:
+            self.warned_channels.remove(channel_id)
+        
+        self.save_data()
+        return True, "✅ Channel will be closed!"
     
     def get_user_channel_list(self, user_id: int) -> str:
         """Get formatted list of user's channels"""

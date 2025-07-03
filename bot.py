@@ -1,6 +1,7 @@
 import discord
 import os
 import re
+import asyncio
 from dotenv import load_dotenv
 from discord import app_commands
 from ai_handler import get_ai_response
@@ -212,12 +213,18 @@ async def tempclose_command(interaction: discord.Interaction):
         await interaction.response.send_message("❌ This command only works in text channels!", ephemeral=True)
         return
     
-    result = await client.temp_channel_manager.close_channel(interaction.channel.id, interaction.user.id)
+    # Check if user can close the channel and get the result
+    success, message = await client.temp_channel_manager.close_channel(interaction.channel.id, interaction.user.id)
     
-    if result == "✅ Channel closed!":
-        await interaction.response.send_message(result)
-    else:
-        await interaction.response.send_message(result, ephemeral=True)
+    if not success:
+        await interaction.response.send_message(message, ephemeral=True)
+        return
+    
+    # Send response first, then the channel will be deleted
+    await interaction.response.send_message("✅ Channel closing in 3 seconds...")
+    
+    # Wait a bit so users can see the message
+    await asyncio.sleep(3)
 
 @client.tree.command(name="templist", description="List your temp channels")
 async def templist_command(interaction: discord.Interaction):
