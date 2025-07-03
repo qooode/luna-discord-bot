@@ -173,42 +173,52 @@ class SummaryView(discord.ui.View):
         return header + self.pages[self.current_page]
 
 async def send_paginated_summary(interaction, summary, message_count):
-    # Split summary into chunks that fit Discord's limit
-    max_content_length = 1800  # Leave room for header and pagination info
+    # Add navigation links to summary
+    oldest_message = await get_oldest_message_from_summary(interaction.channel, message_count)
+    newest_message = await get_newest_message_from_summary(interaction.channel, message_count)
     
-    # Split by sentences to avoid cutting mid-sentence
-    sentences = summary.split('. ')
-    pages = []
-    current_page = ""
+    nav_links = ""
+    if oldest_message and newest_message:
+        oldest_link = f"https://discord.com/channels/{interaction.guild.id}/{interaction.channel.id}/{oldest_message.id}"
+        newest_link = f"https://discord.com/channels/{interaction.guild.id}/{interaction.channel.id}/{newest_message.id}"
+        nav_links = f"\n\n[Jump to start]({oldest_link}) - [Jump to end]({newest_link})"
     
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if not sentence:
-            continue
-            
-        # Add period back if it's not the last sentence
-        if not sentence.endswith('.') and not sentence.endswith('!') and not sentence.endswith('?'):
-            sentence += '.'
-            
-        test_page = current_page + (" " if current_page else "") + sentence
-        
-        if len(test_page) > max_content_length and current_page:
-            pages.append(current_page)
-            current_page = sentence
-        else:
-            current_page = test_page
+    full_summary = summary + nav_links
+    header = f"**what happened in the last {message_count} messages:**\n\n"
     
-    if current_page:
-        pages.append(current_page)
-    
-    if len(pages) == 1:
-        # Single page, no pagination needed
-        header = f"**what happened in the last {message_count} messages:**\n\n"
-        await interaction.followup.send(header + pages[0])
+    # Check if it fits in one message
+    if len(header + full_summary) <= 2000:
+        await interaction.followup.send(header + full_summary)
     else:
-        # Multiple pages, use pagination
-        view = SummaryView(pages, message_count)
+        # Split into smaller chunks
+        max_content_length = 1800
+        chunks = []
+        current_chunk = ""
+        
+        for line in full_summary.split('\n'):
+            test_chunk = current_chunk + '\n' + line if current_chunk else line
+            if len(test_chunk) > max_content_length and current_chunk:
+                chunks.append(current_chunk)
+                current_chunk = line
+            else:
+                current_chunk = test_chunk
+        
+        if current_chunk:
+            chunks.append(current_chunk)
+        
+        view = SummaryView(chunks, message_count)
         await interaction.followup.send(view.get_page_content(), view=view)
+
+async def get_oldest_message_from_summary(channel, count):
+    messages = []
+    async for message in channel.history(limit=count):
+        messages.append(message)
+    return messages[-1] if messages else None
+
+async def get_newest_message_from_summary(channel, count):
+    async for message in channel.history(limit=1):
+        return message
+    return None
 
 async def create_message_summary(messages, original_count, channel):
     """Create a human-tone summary of messages focusing on topics and key participants."""
@@ -226,17 +236,18 @@ async def create_message_summary(messages, original_count, channel):
     oldest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{oldest_message['message_id']}" if oldest_message else ""
     newest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{newest_message['message_id']}" if newest_message else ""
     
-    system_prompt = """Write a surgical, on-point summary. No fluff.
+    system_prompt = """Write a casual, human summary. MAX 300 words. Be conversational but organized.
 
-- lowercase except names
-- who said what
-- where discussions started
-- key points only
-- natural human tone
-- be thorough but concise
+Format like this:
+**main stuff that happened:**
+- brief human description of topic (who started it)
+- another topic if there was one
 
-Example: "Jake started talking game updates, got everyone excited. Sarah disagreed, big debate followed. Tom suggested movie night, everyone agreed."
-"""
+**who was active:**
+- Name: what they were up to
+- Name: their thing
+
+Write like you're telling a friend. lowercase, natural, but keep the structure clean."""
     
     user_prompt = f"""Messages:
 
