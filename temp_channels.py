@@ -129,8 +129,13 @@ class TempChannelManager:
                 except:
                     pass
                 
-                await channel.delete(reason=reason)
-                print(f"Deleted temp channel: {channel.name} - {reason}")
+                try:
+                    await channel.delete(reason=reason)
+                    print(f"Deleted temp channel: {channel.name} - {reason}")
+                except discord.Forbidden:
+                    print(f"Error deleting temp channel {channel_id}: Missing permissions. Bot needs 'Manage Channels' permission.")
+                except Exception as e:
+                    print(f"Error deleting temp channel {channel_id}: {e}")
         except Exception as e:
             print(f"Error deleting temp channel {channel_id}: {e}")
     
@@ -272,7 +277,8 @@ class TempChannelManager:
             # Set up permissions
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(read_messages=channel_type == 'public'),
-                creator: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_messages=True)
+                creator: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_messages=True),
+                self.bot.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_messages=True, manage_channels=True)
             }
             
             # Create the channel
@@ -336,7 +342,12 @@ class TempChannelManager:
             return "❌ Channel not found!"
         
         # Add permission for the user
-        await channel.set_permissions(target_user, read_messages=True, send_messages=True)
+        try:
+            await channel.set_permissions(target_user, read_messages=True, send_messages=True)
+        except discord.Forbidden:
+            return f"❌ I don't have permission to invite users to this channel. Make sure I have 'Manage Channels' permission!"
+        except Exception as e:
+            return f"❌ Error inviting user: {str(e)}"
         
         # Update activity
         self.temp_channels[channel_id]['last_activity'] = datetime.now()
