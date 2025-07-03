@@ -224,10 +224,10 @@ async def create_message_summary(messages, original_count, channel):
     """Create a human-tone summary of messages focusing on topics and key participants."""
     from ai_handler import _call_openrouter
     
-    # Format messages for AI processing
+    # Format messages for AI processing with IDs for linking
     message_text = ""
     for msg in messages:
-        message_text += f"{msg['author']}: {msg['content']}\n"
+        message_text += f"[ID:{msg['message_id']}] {msg['author']}: {msg['content']}\n"
     
     # Create message links for navigation
     oldest_message = messages[0] if messages else None
@@ -236,22 +236,25 @@ async def create_message_summary(messages, original_count, channel):
     oldest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{oldest_message['message_id']}" if oldest_message else ""
     newest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{newest_message['message_id']}" if newest_message else ""
     
-    system_prompt = """Write a casual, human summary. MAX 300 words. Be conversational but organized.
+    system_prompt = """Create a beautiful, flowing summary. Follow conversations chronologically. MAX 400 words.
 
-Format like this:
-**main stuff that happened:**
-- brief human description of topic (who started it)
-- another topic if there was one
+Format:
+**casual human title like "digitalbarrito complaining about fusion again"** - [starter name kicked this off](message_link)
+flowing description of how the conversation went, who joined in, what they said, how it evolved
 
-**who was active:**
-- Name: what they were up to
-- Name: their thing
+**another casual title like "chase dreaming about moving to thailand"** - [name started this](message_link) 
+natural flow of the discussion
 
-Write like you're telling a friend. lowercase, natural, but keep the structure clean."""
+Use casual, human titles that capture what actually happened. No generic topic names. Visual breaks, chronological flow. No intro fluff."""
     
-    user_prompt = f"""Messages:
+    user_prompt = f"""Messages with IDs for linking:
 
 {message_text}
+
+For each major topic, create a link to where that conversation started using format:
+[person started this](https://discord.com/channels/{channel.guild.id}/{channel.id}/MESSAGE_ID_HERE)
+
+Find the message IDs from the conversation above and use them in your summary.
 
 Add at end: [Jump to start]({oldest_link}) - [Jump to end]({newest_link})"""
     
