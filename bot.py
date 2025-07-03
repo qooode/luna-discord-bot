@@ -175,6 +175,7 @@ UNDER 1500 CHARACTERS TOTAL OR IT FAILS.
 - natural human tone
 
 Example: "Jake started talking game updates, got everyone excited. Sarah disagreed, big debate followed. Tom suggested movie night, everyone agreed."
+"""
     
     user_prompt = f"""Messages:
 
