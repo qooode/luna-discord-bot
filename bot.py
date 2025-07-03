@@ -180,7 +180,7 @@ Example: "Jake started talking game updates, got everyone excited. Sarah disagre
 
 {message_text}
 
-Add at end: [Jump to start]({oldest_link}) • [Jump to end]({newest_link})
+Add at end: [Jump to start]({oldest_link}) - [Jump to end]({newest_link})
 
 UNDER 1500 CHARACTERS TOTAL."""
     
