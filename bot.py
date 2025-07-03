@@ -541,8 +541,10 @@ async def on_reaction_add(reaction, user):
         return
     
     # Check if this is a temp channel extension reaction
-    if str(reaction.emoji) == "⏰" and isinstance(reaction.message.channel, discord.TextChannel):
+    extension_emojis = {"🕐": 5, "🕙": 10, "🕞": 30}
+    if str(reaction.emoji) in extension_emojis and isinstance(reaction.message.channel, discord.TextChannel):
         channel_id = reaction.message.channel.id
+        extension_minutes = extension_emojis[str(reaction.emoji)]
         
         # Check if this is a temp channel and the reaction is on a warning message
         if channel_id in client.temp_channel_manager.temp_channels:
@@ -551,7 +553,7 @@ async def on_reaction_add(reaction, user):
             
             # Only process if this is the warning message and user is the creator
             if warning_message_id == reaction.message.id and channel_data['creator_id'] == user.id:
-                result = await client.temp_channel_manager.extend_channel(channel_id, user.id)
+                result = await client.temp_channel_manager.extend_channel(channel_id, user.id, extension_minutes)
                 
                 # Send confirmation message
                 await reaction.message.channel.send(f"{user.mention} {result}")

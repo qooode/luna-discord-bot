@@ -59,6 +59,7 @@ class TempChannelManager:
         while True:
             try:
                 await self.cleanup_expired_channels()
+                await self.update_channel_timers()
                 await asyncio.sleep(60)  # Check every minute
             except Exception as e:
                 print(f"Error in cleanup loop: {e}")
@@ -89,18 +90,29 @@ class TempChannelManager:
                 channels_to_remove.append(channel_id)
                 continue
             
-            # Check if channel is inactive (no activity for 10 minutes)
+            # Calculate smart inactivity limits based on channel duration
+            expires_at = data['expires_at']
+            created_at = data['created_at']
+            total_duration_minutes = int((expires_at - created_at).total_seconds() / 60)
+            
+            # Inactivity limit: half the total duration or 10 minutes, whichever is smaller
+            inactivity_limit = min(10, total_duration_minutes // 2)
+            if inactivity_limit < 2:  # Minimum 2 minutes for very short channels
+                inactivity_limit = min(2, total_duration_minutes)
+            
+            # Check if channel is inactive
             last_activity = data.get('last_activity', data['created_at'])
             time_since_activity = now - last_activity
             
-            # Send inactivity warning at 5 minutes of inactivity
-            if time_since_activity >= timedelta(minutes=5) and time_since_activity < timedelta(minutes=10):
+            # Send inactivity warning at half the inactivity limit
+            warning_time = max(1, inactivity_limit // 2)  # At least 1 minute warning
+            if time_since_activity >= timedelta(minutes=warning_time) and time_since_activity < timedelta(minutes=inactivity_limit):
                 if not data.get('inactivity_warned', False):
-                    await self.send_inactivity_warning(channel)
+                    await self.send_inactivity_warning(channel, inactivity_limit - int(time_since_activity.total_seconds() / 60))
                     self.temp_channels[channel_id]['inactivity_warned'] = True
             
-            # Delete after 10 minutes of inactivity
-            if time_since_activity >= timedelta(minutes=10):
+            # Delete after inactivity limit
+            if time_since_activity >= timedelta(minutes=inactivity_limit):
                 # Check if channel is empty
                 if len(channel.members) == 0:
                     await self.delete_temp_channel(channel_id, "💤 Channel deleted due to inactivity")
@@ -116,6 +128,62 @@ class TempChannelManager:
         
         if channels_to_remove:
             self.save_data()
+    
+    async def update_channel_timers(self):
+        """Update channel names with countdown timers"""
+        now = datetime.now()
+        
+        for channel_id, data in self.temp_channels.items():
+            try:
+                channel = self.bot.get_channel(channel_id)
+                if not channel:
+                    continue
+                
+                # Calculate time remaining
+                time_left = data['expires_at'] - now
+                if time_left.total_seconds() <= 0:
+                    continue  # Will be cleaned up by cleanup task
+                
+                # Get the base topic (without timer)
+                clean_topic = data['topic'].replace(' ', '-').lower()
+                
+                # Calculate smart timer display
+                total_minutes = int(time_left.total_seconds() / 60)
+                hours = total_minutes // 60
+                minutes = total_minutes % 60
+                
+                # Smart timer logic
+                if total_minutes >= 120:  # 2+ hours: show only hours
+                    if hours >= 24:
+                        timer_display = f"{hours//24}d"
+                    else:
+                        timer_display = f"{hours}h"
+                elif total_minutes >= 60:  # 1-2 hours: show hours and minutes if minutes > 0
+                    if minutes > 0:
+                        timer_display = f"{hours}h{minutes}m"
+                    else:
+                        timer_display = f"{hours}h"
+                else:  # Under 1 hour: show minutes
+                    timer_display = f"{total_minutes}m"
+                
+                # Check if extended
+                is_extended = data.get('extended', False)
+                extended_suffix = "-extended" if is_extended else ""
+                
+                # Create new channel name
+                new_name = f"⏰・{clean_topic}-{timer_display}{extended_suffix}"
+                
+                # Only update if name changed
+                if channel.name != new_name:
+                    try:
+                        await channel.edit(name=new_name)
+                        print(f"Updated channel timer: {new_name}")
+                    except discord.HTTPException:
+                        # Rate limited or permission issues
+                        pass
+                        
+            except Exception as e:
+                print(f"Error updating timer for channel {channel_id}: {e}")
     
     async def delete_temp_channel(self, channel_id: int, reason: str):
         """Delete a temp channel with a reason"""
@@ -153,12 +221,14 @@ class TempChannelManager:
             )
             embed.add_field(
                 name="Want to extend?", 
-                value="React with ⏰ to add 30 more minutes", 
+                value="🕐 +5min | 🕙 +10min | 🕞 +30min", 
                 inline=False
             )
             
             message = await channel.send(embed=embed)
-            await message.add_reaction("⏰")
+            await message.add_reaction("🕐")
+            await message.add_reaction("🕙")
+            await message.add_reaction("🕞")
             
             # Store message ID for reaction handling
             if channel.id in self.temp_channels:
@@ -167,12 +237,12 @@ class TempChannelManager:
         except Exception as e:
             print(f"Error sending expiration warning: {e}")
     
-    async def send_inactivity_warning(self, channel: discord.TextChannel):
+    async def send_inactivity_warning(self, channel: discord.TextChannel, minutes_left: int):
         """Send warning when channel is inactive"""
         try:
             embed = discord.Embed(
                 title="💤 Channel Inactive",
-                description="This channel will be deleted in **5 minutes** due to inactivity.",
+                description=f"This channel will be deleted in **{minutes_left} minute{'s' if minutes_left != 1 else ''}** due to inactivity.",
                 color=discord.Color.red()
             )
             embed.add_field(
@@ -186,8 +256,8 @@ class TempChannelManager:
         except Exception as e:
             print(f"Error sending inactivity warning: {e}")
     
-    async def extend_channel(self, channel_id: int, user_id: int) -> str:
-        """Extend a channel by 30 minutes"""
+    async def extend_channel(self, channel_id: int, user_id: int, extension_minutes: int) -> str:
+        """Extend a channel by specified minutes"""
         if channel_id not in self.temp_channels:
             return "❌ This is not a temp channel!"
         
@@ -197,41 +267,26 @@ class TempChannelManager:
         if channel_data['creator_id'] != user_id:
             return "❌ Only the channel creator can extend the channel!"
         
-        # Extend by 30 minutes
-        self.temp_channels[channel_id]['expires_at'] += timedelta(minutes=30)
+        # Extend by specified minutes
+        self.temp_channels[channel_id]['expires_at'] += timedelta(minutes=extension_minutes)
+        
+        # Mark as extended
+        self.temp_channels[channel_id]['extended'] = True
         
         # Reset warning status
         if channel_id in self.warned_channels:
             self.warned_channels.remove(channel_id)
         
-        # Update channel name and topic to reflect extension
+        # Update channel topic to show extension
         channel = self.bot.get_channel(channel_id)
         if channel:
-            new_expires_at = self.temp_channels[channel_id]['expires_at']
-            time_left = new_expires_at - datetime.now()
-            hours, remainder = divmod(int(time_left.total_seconds()), 3600)
-            minutes, _ = divmod(remainder, 60)
-            
-            # Calculate new duration display
-            if hours >= 1:
-                new_duration_display = f"{hours}h{minutes}m" if minutes > 0 else f"{hours}h"
-            else:
-                new_duration_display = f"{minutes}m"
-            
-            # Update channel name to show extended time
-            clean_topic = channel_data['topic'].replace(' ', '-').lower()
-            new_channel_name = f"⏰・{clean_topic}-{new_duration_display}-extended"
-            
             try:
-                await channel.edit(
-                    name=new_channel_name,
-                    topic=f"⏰ Extended! {new_duration_display} remaining | Created by {channel_data['creator_name']}"
-                )
+                await channel.edit(topic=f"⏰ Extended! | Created by {channel_data['creator_name']}")
             except:
                 pass
         
         self.save_data()
-        return "✅ Channel extended by 30 minutes!"
+        return f"✅ Channel extended by {extension_minutes} minutes!"
     
     def parse_duration(self, duration_str: str) -> Optional[timedelta]:
         """Parse duration string to timedelta"""
@@ -330,9 +385,17 @@ class TempChannelManager:
             # Save data
             self.save_data()
             
-            # Send welcome message
+            # Send welcome message with smart logic
+            duration_minutes = int(duration_delta.total_seconds() / 60)
+            inactivity_limit = min(10, duration_minutes // 2)  # Half the duration or 10 min, whichever is smaller
+            
+            if duration_minutes <= 10:
+                inactivity_text = f"after **{duration_minutes} minutes** of inactivity"
+            else:
+                inactivity_text = f"after **{inactivity_limit} minutes** of inactivity"
+            
             await channel.send(f"**{topic}** - Created by {creator.mention}\n"
-                             f"⏰ This channel will be deleted in **{duration}** or after **10 minutes** of inactivity.\n"
+                             f"⏰ This channel will be deleted in **{duration}** or {inactivity_text}.\n"
                              f"{'🔒 This is a private channel. Use `/invite @user` to add people.' if channel_type == 'private' else '🌍 This is a public channel - anyone can join!'}")
             
             return channel, None
