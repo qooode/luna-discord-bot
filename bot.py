@@ -139,14 +139,76 @@ async def summarize_command(interaction: discord.Interaction, count: int = 100):
         # Create summary using AI with message links
         summary = await create_message_summary(messages, count, interaction.channel)
         
-        # Format the summary with casual styling
-        formatted_summary = f"**what happened in the last {len(messages)} messages:**\n\n{summary}"
-        
-        # Send the summary (length limit handled in AI prompt)
-        await interaction.followup.send(formatted_summary)
+        # Split summary into pages if needed
+        await send_paginated_summary(interaction, summary, len(messages))
         
     except Exception as e:
         await interaction.followup.send(f"❌ Error creating summary: {str(e)}", ephemeral=True)
+
+class SummaryView(discord.ui.View):
+    def __init__(self, pages, message_count):
+        super().__init__(timeout=300)
+        self.pages = pages
+        self.current_page = 0
+        self.message_count = message_count
+        
+    @discord.ui.button(label='◀', style=discord.ButtonStyle.grey)
+    async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page > 0:
+            self.current_page -= 1
+            await interaction.response.edit_message(content=self.get_page_content(), view=self)
+        else:
+            await interaction.response.defer()
+    
+    @discord.ui.button(label='▶', style=discord.ButtonStyle.grey)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page < len(self.pages) - 1:
+            self.current_page += 1
+            await interaction.response.edit_message(content=self.get_page_content(), view=self)
+        else:
+            await interaction.response.defer()
+    
+    def get_page_content(self):
+        header = f"**what happened in the last {self.message_count} messages:** (page {self.current_page + 1}/{len(self.pages)})\n\n"
+        return header + self.pages[self.current_page]
+
+async def send_paginated_summary(interaction, summary, message_count):
+    # Split summary into chunks that fit Discord's limit
+    max_content_length = 1800  # Leave room for header and pagination info
+    
+    # Split by sentences to avoid cutting mid-sentence
+    sentences = summary.split('. ')
+    pages = []
+    current_page = ""
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+            
+        # Add period back if it's not the last sentence
+        if not sentence.endswith('.') and not sentence.endswith('!') and not sentence.endswith('?'):
+            sentence += '.'
+            
+        test_page = current_page + (" " if current_page else "") + sentence
+        
+        if len(test_page) > max_content_length and current_page:
+            pages.append(current_page)
+            current_page = sentence
+        else:
+            current_page = test_page
+    
+    if current_page:
+        pages.append(current_page)
+    
+    if len(pages) == 1:
+        # Single page, no pagination needed
+        header = f"**what happened in the last {message_count} messages:**\n\n"
+        await interaction.followup.send(header + pages[0])
+    else:
+        # Multiple pages, use pagination
+        view = SummaryView(pages, message_count)
+        await interaction.followup.send(view.get_page_content(), view=view)
 
 async def create_message_summary(messages, original_count, channel):
     """Create a human-tone summary of messages focusing on topics and key participants."""
@@ -166,13 +228,12 @@ async def create_message_summary(messages, original_count, channel):
     
     system_prompt = """Write a surgical, on-point summary. No fluff.
 
-UNDER 1500 CHARACTERS TOTAL OR IT FAILS.
-
 - lowercase except names
 - who said what
 - where discussions started
 - key points only
 - natural human tone
+- be thorough but concise
 
 Example: "Jake started talking game updates, got everyone excited. Sarah disagreed, big debate followed. Tom suggested movie night, everyone agreed."
 """
@@ -181,9 +242,7 @@ Example: "Jake started talking game updates, got everyone excited. Sarah disagre
 
 {message_text}
 
-Add at end: [Jump to start]({oldest_link}) - [Jump to end]({newest_link})
-
-UNDER 1500 CHARACTERS TOTAL."""
+Add at end: [Jump to start]({oldest_link}) - [Jump to end]({newest_link})"""
     
     summary = _call_openrouter(
         "google/gemini-2.5-flash-preview-05-20",
