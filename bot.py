@@ -139,6 +139,14 @@ async def summarize_command(interaction: discord.Interaction, count: int = 100):
         # Create summary using AI with message links
         summary = await create_message_summary(messages, count, interaction.channel)
         
+        # Convert message IDs to clickable links
+        import re
+        def replace_message_id(match):
+            message_id = match.group(1)
+            return f"[↗](<https://discord.com/channels/{interaction.guild.id}/{interaction.channel.id}/{message_id}>)"
+        
+        summary = re.sub(r'\[(\d+)\]', replace_message_id, summary)
+        
         # Simple summary - no pagination
         header = f"**what happened in the last {len(messages)} messages:**\n\n"
         await interaction.followup.send(header + summary)
@@ -237,24 +245,19 @@ async def create_message_summary(messages, original_count, channel):
     oldest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{oldest_message['message_id']}" if oldest_message else ""
     newest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{newest_message['message_id']}" if newest_message else ""
     
-    system_prompt = """Ultra quick summary. MAX 150 words total.
+    system_prompt = """Create bullet point summary. Each line = one conversation topic.
 
-Format:
-• digitalbarrito was mad about fusion - [link](message_link) - yeb agreed, exate suggested alternatives
-• chase wants to move to thailand - [link](message_link) - everyone talked retirement costs  
+Format exactly like this:
+• Name did/said something specific [MESSAGE_ID_HERE]
+• Another name talked about topic [MESSAGE_ID_HERE]
 
-Keep each line super short. One sentence per topic max. No fluff."""
+Use the message IDs from the conversation. Keep each bullet short and specific. No extra text."""
     
     user_prompt = f"""Messages with IDs for linking:
 
 {message_text}
 
-For each major topic, create a link to where that conversation started using format:
-[person started this](https://discord.com/channels/{channel.guild.id}/{channel.id}/MESSAGE_ID_HERE)
-
-Find the message IDs from the conversation above and use them in your summary.
-
-Add at end: [Jump to start]({oldest_link}) - [Jump to end]({newest_link})"""
+Create bullet points using the exact message IDs from above. Format: • Name did something [MESSAGE_ID]"""
     
     summary = _call_openrouter(
         "google/gemini-2.5-flash-preview-05-20",
