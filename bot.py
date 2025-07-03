@@ -147,7 +147,7 @@ async def summarize_command(interaction: discord.Interaction, count: int = 100):
         
         summary = re.sub(r'\[(\d+)\]', replace_message_id, summary)
         
-        # Simple summary - no pagination
+        # Simple summary
         header = f"**what happened in the last {len(messages)} messages:**\n\n"
         await interaction.followup.send(header + summary)
         
@@ -245,13 +245,12 @@ async def create_message_summary(messages, original_count, channel):
     oldest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{oldest_message['message_id']}" if oldest_message else ""
     newest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{newest_message['message_id']}" if newest_message else ""
     
-    system_prompt = """Create bullet point summary. Each line = one conversation topic.
+    system_prompt = """Create bullet point summary. One line per topic.
 
-Format exactly like this:
-• Name did/said something specific [MESSAGE_ID_HERE]
-• Another name talked about topic [MESSAGE_ID_HERE]
+Format:
+• Name did/said something specific [MESSAGE_ID]
 
-Use the message IDs from the conversation. Keep each bullet short and specific. No extra text."""
+Use exact message IDs. Keep each bullet ONE LINE. No essays. No explanations."""
     
     user_prompt = f"""Messages with IDs for linking:
 
