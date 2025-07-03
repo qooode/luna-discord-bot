@@ -7,7 +7,6 @@ from discord import app_commands
 from ai_handler import get_ai_response
 from link_handler import handle_links
 from temp_channels import TempChannelManager
-from imposter_game import ImposterGameManager
 
 # Load environment variables
 load_dotenv()
@@ -32,8 +31,6 @@ class LunaBot(discord.Client):
         self.always_enabled_channels = set()
         # Temp channel manager
         self.temp_channel_manager = TempChannelManager(self)
-        # Imposter game manager
-        self.imposter_game_manager = ImposterGameManager(self)
         
     async def setup_hook(self):
         # This is called when the bot is ready
@@ -357,226 +354,9 @@ async def help_command(interaction: discord.Interaction):
         inline=False
     )
     
-    # Imposter Game Features
-    embed.add_field(
-        name="🎭 Imposter Game",
-        value="• `/imposter create [genre]` - Create new game with AI themes\n"
-              "• `/imposter join` - Join existing game\n"
-              "• `/subgenre [type]` - Set specific subgenre (host only)\n"
-              "• `/imposter start` - Start the game (host only)\n"
-              "• `/imposter status` - Check game status\n"
-              "• `/imposter end` - End game (host/admin only)",
-        inline=False
-    )
-    
-    # Imposter Game Rules
-    embed.add_field(
-        name="🎮 Imposter Game Rules",
-        value="• **4-10 players** - Join before game starts\n"
-              "• **AI generates themes** - Always unique and fresh!\n"
-              "• **Character cards sent via DM** - Keep them secret\n"
-              "• **Discussion phase** - 4 minutes to talk about your character\n"
-              "• **Voting phase** - React with numbers to eliminate players\n"
-              "• **Win conditions** - Eliminate all imposters OR imposters equal innocents",
-        inline=False
-    )
-    
-    # Imposter Game Examples
-    embed.add_field(
-        name="💡 Imposter Game Examples",
-        value="• `/imposter create genre:🎬 Movies` - Random movie themes\n"
-              "• `/subgenre Horror Movies` - Specific horror movie themes\n"
-              "• Available genres: Movies, TV Shows, Superheroes, Fantasy, Sci-Fi, Games, Disney, Animals, Food, Music, History\n"
-              "• **Subgenre examples**: Disney Movies, Marvel Heroes, Horror Movies, Action Movies, Anime Shows",
-        inline=False
-    )
-    
     embed.set_footer(text="💡 Tip: Luna works best when mentioned or replied to directly!")
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
-
-# Imposter Game Commands
-@client.tree.command(name="imposter", description="Create or join an imposter game")
-@app_commands.describe(
-    action="What would you like to do?",
-    genre="Choose a genre for AI theme generation (optional)",
-    min_players="Minimum players to start (4-8, default: 4)"
-)
-@app_commands.choices(
-    action=[
-        app_commands.Choice(name="create", value="create"),
-        app_commands.Choice(name="join", value="join"),
-        app_commands.Choice(name="leave", value="leave"),
-        app_commands.Choice(name="start", value="start"),
-        app_commands.Choice(name="status", value="status"),
-        app_commands.Choice(name="end", value="end")
-    ],
-    genre=[
-        app_commands.Choice(name="🎬 Movies", value="Movies"),
-        app_commands.Choice(name="📺 TV Shows", value="TV Shows"),
-        app_commands.Choice(name="🦸 Superheroes", value="Superheroes"),
-        app_commands.Choice(name="🧙 Fantasy", value="Fantasy"),
-        app_commands.Choice(name="🚀 Sci-Fi", value="Sci-Fi"),
-        app_commands.Choice(name="🎮 Video Games", value="Video Games"),
-        app_commands.Choice(name="🏰 Disney", value="Disney"),
-        app_commands.Choice(name="🐱 Animals", value="Animals"),
-        app_commands.Choice(name="🍕 Food", value="Food"),
-        app_commands.Choice(name="🎵 Music", value="Music"),
-        app_commands.Choice(name="⚔️ History", value="History"),
-        app_commands.Choice(name="🌟 Random", value="random")
-    ]
-)
-async def imposter_command(interaction: discord.Interaction, action: app_commands.Choice[str], genre: app_commands.Choice[str] = None, min_players: int = 4):
-    channel_id = interaction.channel_id
-    user_id = interaction.user.id
-    username = interaction.user.display_name
-    
-    if action.value == "create":
-        # Validate min_players
-        min_players = max(4, min(8, min_players))  # Clamp between 4-8
-        
-        success = await client.imposter_game_manager.create_game(channel_id, user_id)
-        if success:
-            # Store the chosen genre and min players for when the game starts
-            game = client.imposter_game_manager.games[channel_id]
-            game.chosen_genre = genre.value if genre else "random"
-            game.min_players = min_players
-            
-            embed = discord.Embed(
-                title="🎭 Imposter Game Created!",
-                description=f"Game host: {username}\n"
-                           f"**Genre:** {genre.name if genre else '🌟 Random'}\n\n"
-                           f"**How to play:**\n"
-                           f"• Use `/imposter join` to join the game\n"
-                           f"• Use `/subgenre [type]` for specific themes (optional)\n"
-                           f"• Need {min_players}-10 players to start\n"
-                           f"• Host uses `/imposter start` when ready\n\n"
-                           f"**Game Rules:**\n"
-                           f"• AI generates unique themes each game!\n"
-                           f"• Everyone gets a character from the same theme\n"
-                           f"• 1-2 players are imposters with different theme\n"
-                           f"• Discuss and vote to eliminate imposters!\n"
-                           f"• Imposters win if they equal/outnumber innocents",
-                color=discord.Color.blue()
-            )
-            game_status = client.imposter_game_manager.get_game_status(channel_id)
-            embed.set_footer(text=f"Players: {game_status['players']}/10 • Minimum: {min_players} to start")
-            await interaction.response.send_message(embed=embed)
-        else:
-            await interaction.response.send_message("❌ A game already exists in this channel!", ephemeral=True)
-    
-    elif action.value == "join":
-        success = await client.imposter_game_manager.join_game(channel_id, user_id, username)
-        if success:
-            game_status = client.imposter_game_manager.get_game_status(channel_id)
-            await interaction.response.send_message(f"✅ {username} joined the game! ({game_status['players']}/10 players)")
-        else:
-            await interaction.response.send_message("❌ Cannot join game (game full, already started, or doesn't exist)", ephemeral=True)
-    
-    elif action.value == "leave":
-        success = await client.imposter_game_manager.leave_game(channel_id, user_id)
-        if success:
-            game_status = client.imposter_game_manager.get_game_status(channel_id)
-            if game_status:
-                await interaction.response.send_message(f"✅ {username} left the game! ({game_status['players']}/10 players)")
-            else:
-                await interaction.response.send_message(f"✅ {username} left the game!")
-        else:
-            await interaction.response.send_message("❌ Cannot leave game (not in game or game already started)", ephemeral=True)
-    
-    elif action.value == "start":
-        await interaction.response.defer(ephemeral=True)
-        success = await client.imposter_game_manager.start_game(channel_id, user_id)
-        if success:
-            await interaction.followup.send("🎭 **Game is starting!** Check your DMs for your character card!")
-        else:
-            await interaction.followup.send("❌ Cannot start game (not host, not enough players, or game doesn't exist)")
-    
-    elif action.value == "status":
-        game_status = client.imposter_game_manager.get_game_status(channel_id)
-        if game_status:
-            state_emoji = {
-                "waiting": "⏳",
-                "starting": "🎬",
-                "discussion": "💬",
-                "voting": "🗳️",
-                "results": "📊",
-                "ended": "🏁"
-            }
-            
-            game = client.imposter_game_manager.games[channel_id]
-            subgenre_text = f" → {game.chosen_subgenre}" if hasattr(game, 'chosen_subgenre') and game.chosen_subgenre else ""
-            
-            embed = discord.Embed(
-                title="🎭 Game Status",
-                description=f"{state_emoji.get(game_status['state'], '❓')} **{game_status['state'].title()}**\n\n"
-                           f"**Players:** {game_status['players']}/10\n"
-                           f"**Alive:** {game_status['alive_players']}\n"
-                           f"**Genre:** {game.chosen_genre}{subgenre_text}\n"
-                           f"**Theme:** {game_status['theme'] if game_status['theme'] else 'Not revealed'}\n"
-                           f"**Round:** {game_status['round']}\n"
-                           f"**Imposters:** {game_status['imposters']}",
-                color=discord.Color.blue()
-            )
-            await interaction.response.send_message(embed=embed)
-        else:
-            await interaction.response.send_message("❌ No game exists in this channel", ephemeral=True)
-    
-    elif action.value == "end":
-        if channel_id in client.imposter_game_manager.games:
-            game = client.imposter_game_manager.games[channel_id]
-            if game.host_id == user_id or interaction.user.guild_permissions.administrator:
-                del client.imposter_game_manager.games[channel_id]
-                client.imposter_game_manager.save_games()
-                await interaction.response.send_message("🏁 Game ended by host/admin")
-            else:
-                await interaction.response.send_message("❌ Only the host or admin can end the game", ephemeral=True)
-        else:
-            await interaction.response.send_message("❌ No game exists in this channel", ephemeral=True)
-
-@client.tree.command(name="subgenre", description="Set a specific subgenre for your imposter game")
-@app_commands.describe(
-    subgenre="Specific type within your chosen genre (e.g., 'Horror Movies', 'Disney Movies', 'Marvel Heroes')"
-)
-async def subgenre_command(interaction: discord.Interaction, subgenre: str):
-    channel_id = interaction.channel_id
-    user_id = interaction.user.id
-    
-    if channel_id not in client.imposter_game_manager.games:
-        await interaction.response.send_message("❌ No game exists in this channel! Create one first with `/imposter create`", ephemeral=True)
-        return
-    
-    game = client.imposter_game_manager.games[channel_id]
-    
-    # Only host can set subgenre and only before game starts
-    if game.host_id != user_id:
-        await interaction.response.send_message("❌ Only the game host can set the subgenre!", ephemeral=True)
-        return
-    
-    if game.state.value != "waiting":
-        await interaction.response.send_message("❌ Cannot change subgenre after game has started!", ephemeral=True)
-        return
-    
-    # Set the subgenre
-    game.chosen_subgenre = subgenre.strip()
-    client.imposter_game_manager.save_games()
-    
-    # Show confirmation with AI-generated examples
-    embed = discord.Embed(
-        title="🎯 Subgenre Set!",
-        description=f"**Subgenre:** {subgenre}\n"
-                   f"**Main Genre:** {game.chosen_genre}\n\n"
-                   f"AI will now generate themes specifically from **{subgenre}**!\n\n"
-                   f"Examples of what you might get:\n"
-                   f"• Horror Movies → 'Friday the 13th' vs 'Halloween'\n"
-                   f"• Disney Movies → 'Frozen' vs 'Moana'\n"
-                   f"• Marvel Heroes → 'Avengers' vs 'X-Men'\n"
-                   f"• Action Movies → 'Fast & Furious' vs 'Mission Impossible'\n\n"
-                   f"Ready to start? Use `/imposter start`!",
-        color=discord.Color.green()
-    )
-    
-    await interaction.response.send_message(embed=embed)
 
 class SummaryView(discord.ui.View):
     def __init__(self, pages, message_count):
@@ -862,7 +642,7 @@ async def on_message(message):
 
 @client.event
 async def on_reaction_add(reaction, user):
-    """Handle reactions for temp channel extensions and imposter game voting"""
+    """Handle reactions for temp channel extensions"""
     # Don't respond to bot reactions
     if user.bot:
         return
@@ -890,25 +670,6 @@ async def on_reaction_add(reaction, user):
                     await reaction.message.delete()
                 except:
                     pass
-    
-    # Check if this is an imposter game voting reaction
-    number_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-    if str(reaction.emoji) in number_emojis and isinstance(reaction.message.channel, discord.TextChannel):
-        channel_id = reaction.message.channel.id
-        
-        # Check if this is an active imposter game in voting phase
-        if channel_id in client.imposter_game_manager.games:
-            game = client.imposter_game_manager.games[channel_id]
-            if game.state.value == "voting":
-                vote_index = number_emojis.index(str(reaction.emoji))
-                success = await client.imposter_game_manager.process_vote(channel_id, user.id, vote_index)
-                
-                if success:
-                    # Remove the reaction to prevent double voting
-                    try:
-                        await reaction.remove(user)
-                    except:
-                        pass
 
 async def send_long_message(message_channel, text, reference_message):
     MAX_LENGTH = 2000
