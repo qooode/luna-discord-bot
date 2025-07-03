@@ -234,7 +234,8 @@ async def tempclose_command(interaction: discord.Interaction):
         return
     
     # Check if user can close the channel and get the result
-    success, message = await client.temp_channel_manager.close_channel(interaction.channel.id, interaction.user.id)
+    is_admin = interaction.user.guild_permissions.administrator
+    success, message = await client.temp_channel_manager.close_channel(interaction.channel.id, interaction.user.id, is_admin)
     
     if not success:
         await interaction.response.send_message(message, ephemeral=True)
@@ -250,6 +251,112 @@ async def tempclose_command(interaction: discord.Interaction):
 async def templist_command(interaction: discord.Interaction):
     channel_list = client.temp_channel_manager.get_user_channel_list(interaction.user.id)
     await interaction.response.send_message(f"**Your temp channels:**\n{channel_list}", ephemeral=True)
+
+@client.tree.command(name="tempon", description="Enable temp channels (Admin only)")
+async def tempon_command(interaction: discord.Interaction):
+    # Check if user is admin
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Only administrators can use this command!", ephemeral=True)
+        return
+    
+    client.temp_channel_manager.enable_temp_channels()
+    await interaction.response.send_message("✅ Temp channels have been **enabled**!", ephemeral=True)
+
+@client.tree.command(name="tempoff", description="Disable temp channels (Admin only)")
+async def tempoff_command(interaction: discord.Interaction):
+    # Check if user is admin
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Only administrators can use this command!", ephemeral=True)
+        return
+    
+    client.temp_channel_manager.disable_temp_channels()
+    await interaction.response.send_message("⛔ Temp channels have been **disabled**!", ephemeral=True)
+
+@client.tree.command(name="help", description="Show all available commands and features")
+async def help_command(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🤖 Luna Bot - Help & Commands",
+        description="Here are all the features and commands available:",
+        color=discord.Color.blue()
+    )
+    
+    # AI Chat Features
+    embed.add_field(
+        name="💬 AI Chat",
+        value="• **Mention Luna** - `@Luna your message` to have a conversation\n"
+              "• **Reply to Luna** - Reply to Luna's messages to continue the chat\n"
+              "• **Smart Context** - Luna remembers recent conversation history",
+        inline=False
+    )
+    
+    # Luna Control Commands
+    embed.add_field(
+        name="🎛️ Luna Controls",
+        value="• `/luna listen here` - Enable Luna in this channel\n"
+              "• `/luna be quiet here` - Disable Luna in this channel\n"
+              "• `/luna listen everywhere` - Enable Luna in all channels\n"
+              "• `/luna be quiet everywhere` - Disable Luna globally\n"
+              "• `/luna how are you feeling` - Check Luna's status",
+        inline=False
+    )
+    
+    # Summary Features
+    embed.add_field(
+        name="📝 Chat Summary",
+        value="• `/summarize` - Get a summary of recent messages (default: 100)\n"
+              "• `/summarize count:50` - Summarize specific number of messages\n"
+              "• **Smart filtering** - Skips commands and short messages\n"
+              "• **Clickable links** - Jump to specific messages",
+        inline=False
+    )
+    
+    # Temp Channel Features
+    embed.add_field(
+        name="⏰ Temporary Channels",
+        value="• `/temp <topic> <type> <duration>` - Create temp channels\n"
+              "• **Types**: `public` (anyone can join) or `private` (invite-only)\n"
+              "• **Durations**: 5min, 10min, 15min, 30min, 45min, 1h, 1h30m, 2h, 3h, 4h, 6h, 8h, 12h, 24h\n"
+              "• **Live countdown** - Channel names update with time remaining\n"
+              "• **Smart cleanup** - Auto-delete when expired or inactive",
+        inline=False
+    )
+    
+    # Temp Channel Management
+    embed.add_field(
+        name="🛠️ Temp Channel Management",
+        value="• `/invite @user` - Invite someone to your private temp channel\n"
+              "• `/kick @user` - Remove someone from your private temp channel\n"
+              "• `/tempclose` - Close your temp channel immediately\n"
+              "• `/templist` - List all your active temp channels\n"
+              "• **Extension options** - React 🕐 +5min | 🕙 +10min | 🕞 +30min when warned",
+        inline=False
+    )
+    
+    # Smart Features
+    embed.add_field(
+        name="🧠 Smart Features",
+        value="• **Link handling** - Processes Twitter/X links automatically\n"
+              "• **Anti-spam** - Cooldowns and limits prevent abuse\n"
+              "• **Activity tracking** - Channels stay alive while being used\n"
+              "• **Smart warnings** - Get notified before channels expire\n"
+              "• **Context awareness** - Luna understands conversation flow",
+        inline=False
+    )
+    
+    # Usage Examples
+    embed.add_field(
+        name="💡 Quick Examples",
+        value="• `@Luna what's the weather like?` - Ask Luna anything\n"
+              "• `/temp debug session public 1h` - Create 1-hour debug channel\n"
+              "• `/temp planning meeting private 30min` - Private 30-min meeting\n"
+              "• `/summarize count:200` - Summarize last 200 messages\n"
+              "• `/luna listen here` - Enable Luna in current channel",
+        inline=False
+    )
+    
+    embed.set_footer(text="💡 Tip: Luna works best when mentioned or replied to directly!")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 class SummaryView(discord.ui.View):
     def __init__(self, pages, message_count):

@@ -13,6 +13,7 @@ class TempChannelManager:
         self.user_cooldowns: Dict[int, datetime] = {}
         self.cleanup_task = None
         self.warned_channels: set = set()  # Track channels that got 5-min warning
+        self.enabled = True  # Global enable/disable switch
         self.load_data()
     
     def load_data(self):
@@ -325,6 +326,9 @@ class TempChannelManager:
                                 topic: str, channel_type: str, duration: str) -> Optional[discord.TextChannel]:
         """Create a new temporary channel"""
         try:
+            # Check if temp channels are enabled
+            if not self.enabled:
+                return None, "❌ Temp channels are currently disabled by administrators."
             # Check user limits
             if len(self.get_user_channels(creator.id)) >= 2:
                 return None, "❌ You already have 2 temp channels! Close one first."
@@ -483,19 +487,20 @@ class TempChannelManager:
                 del self.temp_channels[channel_id]['inactivity_warned']
             # Don't save on every message - let the cleanup task handle it
     
-    async def close_channel(self, channel_id: int, user_id: int):
+    async def close_channel(self, channel_id: int, user_id: int, is_admin: bool = False):
         """Close a temp channel manually"""
         if channel_id not in self.temp_channels:
             return False, "❌ This is not a temp channel!"
         
         channel_data = self.temp_channels[channel_id]
         
-        # Check if user is the creator
-        if channel_data['creator_id'] != user_id:
-            return False, "❌ Only the channel creator can close the channel!"
+        # Check if user is the creator or an admin
+        if channel_data['creator_id'] != user_id and not is_admin:
+            return False, "❌ Only the channel creator or administrators can close the channel!"
         
         # Delete the channel
-        await self.delete_temp_channel(channel_id, "Channel closed by creator")
+        closer_type = "administrator" if is_admin and channel_data['creator_id'] != user_id else "creator"
+        await self.delete_temp_channel(channel_id, f"Channel closed by {closer_type}")
         
         # Clean up tracking data
         if channel_id in self.temp_channels:
@@ -525,3 +530,17 @@ class TempChannelManager:
                 channel_list.append(f"**{data['topic']}** - {time_str} left ({data['type']})")
         
         return "\n".join(channel_list) if channel_list else "You don't have any temp channels."
+    
+    def enable_temp_channels(self):
+        """Enable temp channels globally"""
+        self.enabled = True
+        self.save_data()
+    
+    def disable_temp_channels(self):
+        """Disable temp channels globally"""
+        self.enabled = False
+        self.save_data()
+    
+    def is_enabled(self) -> bool:
+        """Check if temp channels are enabled"""
+        return self.enabled
