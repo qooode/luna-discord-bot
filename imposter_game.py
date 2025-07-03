@@ -136,20 +136,32 @@ class ThemeGenerator:
                 user_prompt
             )
             
+            print(f"AI Response: {response}")  # Debug logging
+            
             # Parse JSON response
             import json
-            theme_data = json.loads(response.strip())
+            # Clean up response - remove any markdown code blocks
+            clean_response = response.strip()
+            if clean_response.startswith("```json"):
+                clean_response = clean_response[7:]
+            if clean_response.endswith("```"):
+                clean_response = clean_response[:-3]
+            clean_response = clean_response.strip()
+            
+            theme_data = json.loads(clean_response)
             
             # Validate structure
             required_keys = ["main", "imposter", "main_chars", "imposter_chars", "main_facts", "imposter_facts", "blend_hints"]
             if all(key in theme_data for key in required_keys):
+                print(f"AI generated themes: {theme_data['main']} vs {theme_data['imposter']}")  # Debug
                 return theme_data
             else:
-                # Fallback to default if AI response is malformed
+                print(f"AI response missing keys: {[k for k in required_keys if k not in theme_data]}")
                 return self.get_fallback_theme()
                 
         except Exception as e:
             print(f"AI theme generation failed: {e}")
+            print(f"Raw response: {response if 'response' in locals() else 'No response'}")
             return self.get_fallback_theme()
     
     def get_fallback_theme(self):
@@ -349,6 +361,7 @@ class ImposterGameManager:
     async def send_character_card(self, user_id: int, theme_data: dict, player: Player):
         user = self.bot.get_user(user_id)
         if not user:
+            print(f"Could not find user {user_id}")
             return
         
         card = self.theme_generator.generate_character_card(theme_data, player.is_imposter, player.character)
@@ -371,8 +384,12 @@ class ImposterGameManager:
         
         try:
             await user.send(embed=embed)
+            print(f"Sent character card to {user.name}: {player.character} ({'imposter' if player.is_imposter else 'innocent'})")
         except discord.Forbidden:
+            print(f"Cannot send DM to {user.name} - DMs disabled")
             pass
+        except Exception as e:
+            print(f"Error sending DM to {user.name}: {e}")
     
     async def start_discussion_phase(self, channel_id: int):
         if channel_id not in self.games:

@@ -485,11 +485,12 @@ async def imposter_command(interaction: discord.Interaction, action: app_command
             await interaction.response.send_message("❌ Cannot leave game (not in game or game already started)", ephemeral=True)
     
     elif action.value == "start":
+        await interaction.response.defer(ephemeral=True)
         success = await client.imposter_game_manager.start_game(channel_id, user_id)
         if success:
-            await interaction.response.send_message("🎭 **Game is starting!** Check your DMs for your character card!", ephemeral=True)
+            await interaction.followup.send("🎭 **Game is starting!** Check your DMs for your character card!")
         else:
-            await interaction.response.send_message("❌ Cannot start game (not host, not enough players, or game doesn't exist)", ephemeral=True)
+            await interaction.followup.send("❌ Cannot start game (not host, not enough players, or game doesn't exist)")
     
     elif action.value == "status":
         game_status = client.imposter_game_manager.get_game_status(channel_id)
