@@ -139,8 +139,9 @@ async def summarize_command(interaction: discord.Interaction, count: int = 100):
         # Create summary using AI with message links
         summary = await create_message_summary(messages, count, interaction.channel)
         
-        # Split summary into pages if needed
-        await send_paginated_summary(interaction, summary, len(messages))
+        # Simple summary - no pagination
+        header = f"**what happened in the last {len(messages)} messages:**\n\n"
+        await interaction.followup.send(header + summary)
         
     except Exception as e:
         await interaction.followup.send(f"❌ Error creating summary: {str(e)}", ephemeral=True)
@@ -236,16 +237,13 @@ async def create_message_summary(messages, original_count, channel):
     oldest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{oldest_message['message_id']}" if oldest_message else ""
     newest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{newest_message['message_id']}" if newest_message else ""
     
-    system_prompt = """Create a beautiful, flowing summary. Follow conversations chronologically. MAX 400 words.
+    system_prompt = """Ultra quick summary. MAX 150 words total.
 
 Format:
-**casual human title like "digitalbarrito complaining about fusion again"** - [starter name kicked this off](message_link)
-flowing description of how the conversation went, who joined in, what they said, how it evolved
+• digitalbarrito was mad about fusion - [link](message_link) - yeb agreed, exate suggested alternatives
+• chase wants to move to thailand - [link](message_link) - everyone talked retirement costs  
 
-**another casual title like "chase dreaming about moving to thailand"** - [name started this](message_link) 
-natural flow of the discussion
-
-Use casual, human titles that capture what actually happened. No generic topic names. Visual breaks, chronological flow. No intro fluff."""
+Keep each line super short. One sentence per topic max. No fluff."""
     
     user_prompt = f"""Messages with IDs for linking:
 
