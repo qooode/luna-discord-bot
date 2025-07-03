@@ -116,11 +116,17 @@ async def summarize_command(interaction: discord.Interaction, count: int = 100):
                 continue  # Skip command messages
             if not message.content.strip():
                 continue  # Skip empty messages
+            if len(message.content) < 3:
+                continue  # Skip very short messages like "ok", "lol"
+            if message.content.lower() in ['ok', 'lol', 'yeah', 'no', 'yes', 'k', 'ty', 'thx', 'thanks']:
+                continue  # Skip common short responses
             
             messages.append({
                 'author': message.author.display_name,
                 'content': message.content,
-                'timestamp': message.created_at.isoformat()
+                'timestamp': message.created_at.isoformat(),
+                'message_id': message.id,
+                'channel_id': message.channel.id
             })
         
         if not messages:
@@ -130,16 +136,19 @@ async def summarize_command(interaction: discord.Interaction, count: int = 100):
         # Reverse to chronological order
         messages.reverse()
         
-        # Create summary using AI
-        summary = await create_message_summary(messages, count)
+        # Create summary using AI with message links
+        summary = await create_message_summary(messages, count, interaction.channel)
         
-        # Send the summary
-        await interaction.followup.send(f"**Summary of last {len(messages)} messages:**\n\n{summary}")
+        # Format the summary with casual styling
+        formatted_summary = f"**what happened in the last {len(messages)} messages:**\n\n{summary}"
+        
+        # Send the summary (length limit handled in AI prompt)
+        await interaction.followup.send(formatted_summary)
         
     except Exception as e:
         await interaction.followup.send(f"❌ Error creating summary: {str(e)}", ephemeral=True)
 
-async def create_message_summary(messages, original_count):
+async def create_message_summary(messages, original_count, channel):
     """Create a human-tone summary of messages focusing on topics and key participants."""
     from ai_handler import _call_openrouter
     
@@ -148,23 +157,38 @@ async def create_message_summary(messages, original_count):
     for msg in messages:
         message_text += f"{msg['author']}: {msg['content']}\n"
     
-    system_prompt = """You are Luna, creating a natural conversation summary. Your job is to capture the essence of what people talked about, not list every detail.
-
-Focus on:
-- Main topics discussed (what were people actually talking about?)
-- Key participants and their contributions
-- Important decisions or conclusions
-- Notable moments or discussions
-
-Write in a conversational, human tone. No formal structure or bullet points. Make it feel like you're telling a friend what happened in the chat. Keep it concise but capture the interesting stuff.
-
-Don't mention every person who said something minor. Focus on the actual substance and flow of conversation.
-
-Example style: "So basically everyone was discussing the new game update, with Jake being super excited about the new features while Sarah was more skeptical about the changes. Then the conversation shifted to weekend plans where most people seemed interested in the movie night idea Tom suggested."
-
-Keep it under 200 words max. Be natural and conversational."""
+    # Create message links for navigation
+    oldest_message = messages[0] if messages else None
+    newest_message = messages[-1] if messages else None
     
-    user_prompt = f"Here are {len(messages)} messages from a Discord channel. Give me a natural, human-tone summary:\n\n{message_text}"
+    oldest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{oldest_message['message_id']}" if oldest_message else ""
+    newest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{newest_message['message_id']}" if newest_message else ""
+    
+    system_prompt = """You are Luna, writing a casual summary like you're telling a friend what happened in the chat. Write in lowercase, be natural and conversational.
+
+Write it like a human would - flowing narrative style, mentioning who said what and where interesting discussions started. No formal structure, no bullet points, no sections with headers.
+
+Guidelines:
+- write in all lowercase (except names)
+- be conversational and natural like texting a friend
+- mention who started topics and who said what
+- capture the flow of conversation 
+- include where discussions began if notable
+- sound human - use casual language, contractions, natural flow
+
+Example style:
+"so basically Jake started talking about the new game update and got everyone pretty excited about the new features, but then Sarah jumped in questioning whether the changes were actually good. that turned into this whole back and forth debate that went on for like 20 messages. later Tom suggested doing a movie night this weekend and most people seemed into it. Mike was quiet most of the time but chimed in with some good points about the game mechanics."
+
+CRITICAL: Keep your ENTIRE response under 1800 characters to fit Discord's limit. Write naturally but concisely."""
+    
+    user_prompt = f"""Here are {len(messages)} messages from a Discord channel. Give me a natural, human-tone summary:
+
+{message_text}
+
+IMPORTANT: At the end of your summary, add these navigation links:
+[Jump to start]({oldest_link}) • [Jump to end]({newest_link})
+
+Remember: Keep ENTIRE response under 1800 characters including the navigation links."""
     
     summary = _call_openrouter(
         "google/gemini-2.5-flash-preview-05-20",
