@@ -113,11 +113,9 @@ class TempChannelManager:
             
             # Delete after inactivity limit
             if time_since_activity >= timedelta(minutes=inactivity_limit):
-                # Check if channel is empty
-                if len(channel.members) == 0:
-                    await self.delete_temp_channel(channel_id, "💤 Channel deleted due to inactivity")
-                    channels_to_remove.append(channel_id)
-                    continue
+                await self.delete_temp_channel(channel_id, "💤 Channel deleted due to inactivity")
+                channels_to_remove.append(channel_id)
+                continue
         
         # Remove deleted channels from tracking
         for channel_id in channels_to_remove:
