@@ -164,31 +164,25 @@ async def create_message_summary(messages, original_count, channel):
     oldest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{oldest_message['message_id']}" if oldest_message else ""
     newest_link = f"https://discord.com/channels/{channel.guild.id}/{channel.id}/{newest_message['message_id']}" if newest_message else ""
     
-    system_prompt = """You are Luna, writing a casual summary like you're telling a friend what happened in the chat. Write in lowercase, be natural and conversational.
+    system_prompt = """Write a surgical, on-point summary. No fluff.
 
-Write it like a human would - flowing narrative style, mentioning who said what and where interesting discussions started. No formal structure, no bullet points, no sections with headers.
+UNDER 1500 CHARACTERS TOTAL OR IT FAILS.
 
-Guidelines:
-- write in all lowercase (except names)
-- be conversational and natural like texting a friend
-- mention who started topics and who said what
-- capture the flow of conversation 
-- include where discussions began if notable
-- sound human - use casual language, contractions, natural flow
+- lowercase except names
+- who said what
+- where discussions started
+- key points only
+- natural human tone
 
-Example style:
-"so basically Jake started talking about the new game update and got everyone pretty excited about the new features, but then Sarah jumped in questioning whether the changes were actually good. that turned into this whole back and forth debate that went on for like 20 messages. later Tom suggested doing a movie night this weekend and most people seemed into it. Mike was quiet most of the time but chimed in with some good points about the game mechanics."
-
-CRITICAL: Keep your ENTIRE response under 1800 characters to fit Discord's limit. Write naturally but concisely."""
+Example: "Jake started talking game updates, got everyone excited. Sarah disagreed, big debate followed. Tom suggested movie night, everyone agreed."
     
-    user_prompt = f"""Here are {len(messages)} messages from a Discord channel. Give me a natural, human-tone summary:
+    user_prompt = f"""Messages:
 
 {message_text}
 
-IMPORTANT: At the end of your summary, add these navigation links:
-[Jump to start]({oldest_link}) • [Jump to end]({newest_link})
+Add at end: [Jump to start]({oldest_link}) • [Jump to end]({newest_link})
 
-Remember: Keep ENTIRE response under 1800 characters including the navigation links."""
+UNDER 1500 CHARACTERS TOTAL."""
     
     summary = _call_openrouter(
         "google/gemini-2.5-flash-preview-05-20",
