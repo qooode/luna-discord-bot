@@ -207,6 +207,19 @@ async def invite_command(interaction: discord.Interaction, user: discord.Member)
     
     await interaction.response.send_message(result, ephemeral=True)
 
+@client.tree.command(name="kick", description="Kick someone from your private temp channel")
+@app_commands.describe(user="User to kick from this channel")
+async def kick_command(interaction: discord.Interaction, user: discord.Member):
+    if not isinstance(interaction.channel, discord.TextChannel):
+        await interaction.response.send_message("❌ This command only works in text channels!", ephemeral=True)
+        return
+    
+    result = await client.temp_channel_manager.kick_user_from_channel(
+        interaction.channel.id, interaction.user.id, user
+    )
+    
+    await interaction.response.send_message(result, ephemeral=True)
+
 @client.tree.command(name="tempclose", description="Close your temp channel")
 async def tempclose_command(interaction: discord.Interaction):
     if not isinstance(interaction.channel, discord.TextChannel):

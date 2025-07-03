@@ -355,6 +355,44 @@ class TempChannelManager:
         
         return f"✅ {target_user.mention} has been invited to the channel!"
     
+    async def kick_user_from_channel(self, channel_id: int, kicker_id: int, target_user: discord.Member) -> str:
+        """Kick a user from a private temp channel"""
+        if channel_id not in self.temp_channels:
+            return "❌ This is not a temp channel!"
+        
+        channel_data = self.temp_channels[channel_id]
+        
+        # Check if user is the creator
+        if channel_data['creator_id'] != kicker_id:
+            return "❌ Only the channel creator can kick users!"
+        
+        # Check if channel is private
+        if channel_data['type'] != 'private':
+            return "❌ You can only kick users from private channels!"
+        
+        # Can't kick yourself
+        if target_user.id == kicker_id:
+            return "❌ You can't kick yourself! Use `/tempclose` to close the channel instead."
+        
+        # Get the channel
+        channel = self.bot.get_channel(channel_id)
+        if not channel:
+            return "❌ Channel not found!"
+        
+        # Remove permissions for the user
+        try:
+            await channel.set_permissions(target_user, overwrite=None)  # Remove specific permissions
+        except discord.Forbidden:
+            return f"❌ I don't have permission to kick users from this channel. Make sure I have 'Manage Channels' permission!"
+        except Exception as e:
+            return f"❌ Error kicking user: {str(e)}"
+        
+        # Update activity
+        self.temp_channels[channel_id]['last_activity'] = datetime.now()
+        self.save_data()
+        
+        return f"✅ {target_user.mention} has been kicked from the channel!"
+    
     async def update_channel_activity(self, channel_id: int):
         """Update last activity for a channel"""
         if channel_id in self.temp_channels:
