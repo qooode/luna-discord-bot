@@ -145,7 +145,7 @@ async def summarize_command(interaction: discord.Interaction, count: int = 100):
             message_id = match.group(1)
             return f"[↗](<https://discord.com/channels/{interaction.guild.id}/{interaction.channel.id}/{message_id}>)"
         
-        summary = re.sub(r'\[(\d+)\]', replace_message_id, summary)
+        summary = re.sub(r'\[ID:(\d+)\]', replace_message_id, summary)
         
         # Simple summary
         header = f"**what happened in the last {len(messages)} messages:**\n\n"
