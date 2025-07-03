@@ -399,7 +399,8 @@ async def help_command(interaction: discord.Interaction):
 @client.tree.command(name="imposter", description="Create or join an imposter game")
 @app_commands.describe(
     action="What would you like to do?",
-    genre="Choose a genre for AI theme generation (optional)"
+    genre="Choose a genre for AI theme generation (optional)",
+    min_players="Minimum players to start (4-8, default: 4)"
 )
 @app_commands.choices(
     action=[
@@ -425,17 +426,21 @@ async def help_command(interaction: discord.Interaction):
         app_commands.Choice(name="🌟 Random", value="random")
     ]
 )
-async def imposter_command(interaction: discord.Interaction, action: app_commands.Choice[str], genre: app_commands.Choice[str] = None):
+async def imposter_command(interaction: discord.Interaction, action: app_commands.Choice[str], genre: app_commands.Choice[str] = None, min_players: int = 4):
     channel_id = interaction.channel_id
     user_id = interaction.user.id
     username = interaction.user.display_name
     
     if action.value == "create":
+        # Validate min_players
+        min_players = max(4, min(8, min_players))  # Clamp between 4-8
+        
         success = await client.imposter_game_manager.create_game(channel_id, user_id)
         if success:
-            # Store the chosen genre for when the game starts
+            # Store the chosen genre and min players for when the game starts
             game = client.imposter_game_manager.games[channel_id]
             game.chosen_genre = genre.value if genre else "random"
+            game.min_players = min_players
             
             embed = discord.Embed(
                 title="🎭 Imposter Game Created!",
@@ -444,7 +449,7 @@ async def imposter_command(interaction: discord.Interaction, action: app_command
                            f"**How to play:**\n"
                            f"• Use `/imposter join` to join the game\n"
                            f"• Use `/subgenre [type]` for specific themes (optional)\n"
-                           f"• Need 4-10 players to start\n"
+                           f"• Need {min_players}-10 players to start\n"
                            f"• Host uses `/imposter start` when ready\n\n"
                            f"**Game Rules:**\n"
                            f"• AI generates unique themes each game!\n"
@@ -454,7 +459,8 @@ async def imposter_command(interaction: discord.Interaction, action: app_command
                            f"• Imposters win if they equal/outnumber innocents",
                 color=discord.Color.blue()
             )
-            embed.set_footer(text="Players: 1/10 • Status: Waiting for players")
+            game_status = client.imposter_game_manager.get_game_status(channel_id)
+            embed.set_footer(text=f"Players: {game_status['players']}/10 • Minimum: {min_players} to start")
             await interaction.response.send_message(embed=embed)
         else:
             await interaction.response.send_message("❌ A game already exists in this channel!", ephemeral=True)

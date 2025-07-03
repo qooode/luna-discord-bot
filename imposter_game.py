@@ -44,6 +44,7 @@ class GameSession:
     eliminated_players: List[int] = None
     chosen_genre: str = "random"
     chosen_subgenre: Optional[str] = None
+    min_players: int = 4
     
     def __post_init__(self):
         if self.eliminated_players is None:
@@ -222,6 +223,8 @@ class ImposterGameManager:
                         game_data['chosen_genre'] = 'random'
                     if 'chosen_subgenre' not in game_data:
                         game_data['chosen_subgenre'] = None
+                    if 'min_players' not in game_data:
+                        game_data['min_players'] = 4
                     
                     self.games[int(channel_id)] = GameSession(**game_data)
         except FileNotFoundError:
@@ -298,7 +301,8 @@ class ImposterGameManager:
         if game.host_id != host_id or game.state != GameState.WAITING:
             return False
         
-        if len(game.players) < 4:  # Minimum 4 players
+        min_players_required = getattr(game, 'min_players', 4)
+        if len(game.players) < min_players_required:
             return False
         
         # Generate theme and assign roles using chosen genre and subgenre
