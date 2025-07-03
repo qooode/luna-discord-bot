@@ -204,17 +204,29 @@ class TempChannelManager:
         if channel_id in self.warned_channels:
             self.warned_channels.remove(channel_id)
         
-        # Update channel topic
+        # Update channel name and topic to reflect extension
         channel = self.bot.get_channel(channel_id)
         if channel:
             new_expires_at = self.temp_channels[channel_id]['expires_at']
             time_left = new_expires_at - datetime.now()
             hours, remainder = divmod(int(time_left.total_seconds()), 3600)
             minutes, _ = divmod(remainder, 60)
-            time_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+            
+            # Calculate new duration display
+            if hours >= 1:
+                new_duration_display = f"{hours}h{minutes}m" if minutes > 0 else f"{hours}h"
+            else:
+                new_duration_display = f"{minutes}m"
+            
+            # Update channel name to show extended time
+            clean_topic = channel_data['topic'].replace(' ', '-').lower()
+            new_channel_name = f"⏰・{clean_topic}-{new_duration_display}-extended"
             
             try:
-                await channel.edit(topic=f"⏰ {time_str} remaining | Created by {channel_data['creator_name']}")
+                await channel.edit(
+                    name=new_channel_name,
+                    topic=f"⏰ Extended! {new_duration_display} remaining | Created by {channel_data['creator_name']}"
+                )
             except:
                 pass
         
@@ -224,11 +236,18 @@ class TempChannelManager:
     def parse_duration(self, duration_str: str) -> Optional[timedelta]:
         """Parse duration string to timedelta"""
         duration_map = {
+            '5min': timedelta(minutes=5),
+            '10min': timedelta(minutes=10),
             '15min': timedelta(minutes=15),
             '30min': timedelta(minutes=30),
+            '45min': timedelta(minutes=45),
             '1h': timedelta(hours=1),
+            '1h30m': timedelta(hours=1, minutes=30),
             '2h': timedelta(hours=2),
+            '3h': timedelta(hours=3),
+            '4h': timedelta(hours=4),
             '6h': timedelta(hours=6),
+            '8h': timedelta(hours=8),
             '12h': timedelta(hours=12),
             '24h': timedelta(hours=24)
         }
@@ -264,15 +283,16 @@ class TempChannelManager:
             # Parse duration
             duration_delta = self.parse_duration(duration)
             if not duration_delta:
-                return None, "❌ Invalid duration! Use: 15min, 30min, 1h, 2h, 6h, 12h, 24h"
+                return None, "❌ Invalid duration! Use: 5min, 10min, 15min, 30min, 45min, 1h, 1h30m, 2h, 3h, 4h, 6h, 8h, 12h, 24h"
             
             # Find or create temp channels category
             category = discord.utils.get(guild.categories, name="Temp Channels")
             if not category:
                 category = await guild.create_category("Temp Channels")
             
-            # Create channel name
-            channel_name = f"temp-{topic.replace(' ', '-')}-{creator.display_name}".lower()
+            # Create channel name with emoji, bullet, topic + duration
+            clean_topic = topic.replace(' ', '-').lower()
+            channel_name = f"⏰・{clean_topic}-{duration}"
             
             # Set up permissions
             overwrites = {

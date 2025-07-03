@@ -173,11 +173,18 @@ async def summarize_command(interaction: discord.Interaction, count: int = 100):
         app_commands.Choice(name="private", value="private")
     ],
     duration=[
+        app_commands.Choice(name="5 minutes", value="5min"),
+        app_commands.Choice(name="10 minutes", value="10min"),
         app_commands.Choice(name="15 minutes", value="15min"),
         app_commands.Choice(name="30 minutes", value="30min"),
+        app_commands.Choice(name="45 minutes", value="45min"),
         app_commands.Choice(name="1 hour", value="1h"),
+        app_commands.Choice(name="1.5 hours", value="1h30m"),
         app_commands.Choice(name="2 hours", value="2h"),
+        app_commands.Choice(name="3 hours", value="3h"),
+        app_commands.Choice(name="4 hours", value="4h"),
         app_commands.Choice(name="6 hours", value="6h"),
+        app_commands.Choice(name="8 hours", value="8h"),
         app_commands.Choice(name="12 hours", value="12h"),
         app_commands.Choice(name="24 hours", value="24h")
     ]
