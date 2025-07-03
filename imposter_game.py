@@ -54,6 +54,7 @@ class GameSession:
         data['start_time'] = self.start_time.isoformat()
         if self.phase_end_time:
             data['phase_end_time'] = self.phase_end_time.isoformat()
+        data['state'] = self.state.value  # Convert enum to string
         return data
 
 class ThemeGenerator:
@@ -215,6 +216,12 @@ class ImposterGameManager:
                     for user_id, player_data in game_data['players'].items():
                         players[int(user_id)] = Player(**player_data)
                     game_data['players'] = players
+                    
+                    # Handle missing fields for backward compatibility
+                    if 'chosen_genre' not in game_data:
+                        game_data['chosen_genre'] = 'random'
+                    if 'chosen_subgenre' not in game_data:
+                        game_data['chosen_subgenre'] = None
                     
                     self.games[int(channel_id)] = GameSession(**game_data)
         except FileNotFoundError:
