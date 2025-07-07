@@ -1,6 +1,8 @@
 import os
 import json
 import requests
+import aiohttp
+import asyncio
 import datetime
 import re  # Added for regex pattern matching
 from typing import List, Dict, Any, Optional, Tuple
@@ -12,7 +14,7 @@ load_dotenv()
 # Get OpenRouter API key from environment variables
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 
-def _call_openrouter(model_name, system_prompt, user_query, enable_web_search=False):
+async def _call_openrouter(model_name, system_prompt, user_query, enable_web_search=False):
     """Helper function to make calls to OpenRouter."""
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -45,17 +47,19 @@ def _call_openrouter(model_name, system_prompt, user_query, enable_web_search=Fa
         print(f"Enabling web search for {model_name} with options: {payload['options']}")
 
     try:
-        # Increased timeout for potentially longer AI responses or searches
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=120) 
-        response.raise_for_status() # Raises HTTPError for bad responses (4XX or 5XX)
-        return response.json()["choices"][0]["message"]["content"]
-    except requests.exceptions.Timeout:
+        # Use aiohttp for async HTTP requests
+        timeout = aiohttp.ClientTimeout(total=120)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post("https://openrouter.ai/api/v1/chat/completions", 
+                                  headers=headers, json=payload) as response:
+                response.raise_for_status()
+                data = await response.json()
+                return data["choices"][0]["message"]["content"]
+    except asyncio.TimeoutError:
         print(f"Timeout calling OpenRouter API ({model_name}) for query: {user_query[:50]}...")
         return "I tried to process your request, but it took too long. Please try again perhaps with a simpler query."
-    except requests.exceptions.RequestException as e:
+    except aiohttp.ClientError as e:
         print(f"Error calling OpenRouter API ({model_name}): {e}")
-        response_text = e.response.text if e.response else "No response text available"
-        print(f"Response content: {response_text}")
         return f"I encountered an issue connecting to my brain (network error). Please try again. Details: {str(e)[:100]}"
     except (KeyError, IndexError) as e:
         print(f"Error parsing OpenRouter response ({model_name}): {e}")
@@ -64,7 +68,7 @@ def _call_openrouter(model_name, system_prompt, user_query, enable_web_search=Fa
         print(f"Problematic Response content: {response_text}")
         return "I had a little trouble understanding the response from my AI services. Could you ask again?"
 
-def _generate_specific_search_queries(user_original_query, context_messages=None):
+async def _generate_specific_search_queries(user_original_query, context_messages=None):
     """
     Uses an LLM to generate specific search queries based on conversation context and minimal queries.
     
@@ -130,7 +134,7 @@ NO explanations, NO comments, ONLY the JSON array.
     
     try:
         # Get raw response from the generator
-        generated_queries_raw = _call_openrouter(generator_model, "", prompt_for_query_generation)
+        generated_queries_raw = await _call_openrouter(generator_model, "", prompt_for_query_generation)
         print(f"Raw response from query generator: {generated_queries_raw}")
         
         # Extract JSON list from the response - handle both clean JSON and JSON within markdown code blocks
@@ -182,7 +186,7 @@ NO explanations, NO comments, ONLY the JSON array.
         print(f"Error generating search queries: {e}")
         return None
 
-def judger_ai_decides_if_online_needed(user_query, context_messages=None):
+async def judger_ai_decides_if_online_needed(user_query, context_messages=None):
     """
     Uses AI to decide if a query needs online data, considering conversation context.
     Returns True if online data is needed, False otherwise.
@@ -243,7 +247,7 @@ def judger_ai_decides_if_online_needed(user_query, context_messages=None):
     # Combine the user query with any context
     full_query = user_query + context_info
     
-    result = _call_openrouter(judger_model, judger_system_prompt, full_query)
+    result = await _call_openrouter(judger_model, judger_system_prompt, full_query)
     
     # Handle the response - we're expecting 'YES' or 'NO', but want to be robust to other responses
     if result and result.strip().upper().startswith('YES'):
@@ -253,7 +257,7 @@ def judger_ai_decides_if_online_needed(user_query, context_messages=None):
         print(f"Judger decided OFFLINE data is sufficient for: '{user_query[:50]}...'")
         return False
 
-def analyze_conversation_context(current_query: str, previous_messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+async def analyze_conversation_context(current_query: str, previous_messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Analyzes previous messages to find ones relevant to the current query.
     Smart context analyzer that first checks 20 messages, then up to 100 if needed.
@@ -308,7 +312,7 @@ def analyze_conversation_context(current_query: str, previous_messages: List[Dic
         
         analyzer_query = f"Current query: '{current_query}'\n\nPrevious messages:\n{context_text}\n\nAre these previous messages relevant context for the current query?"
         
-        result = _call_openrouter(analyzer_model, analyzer_system_prompt, analyzer_query)
+        result = await _call_openrouter(analyzer_model, analyzer_system_prompt, analyzer_query)
         
         if result and 'RELEVANT' in result.strip().upper():
             batch_relevant = True
@@ -327,7 +331,7 @@ def analyze_conversation_context(current_query: str, previous_messages: List[Dic
             
             analyzer_query = f"Current query: '{current_query}'\n\nMore previous messages:\n{context_text}\n\nAre any of these previous messages relevant context for the current query?"
             
-            result = _call_openrouter(analyzer_model, analyzer_system_prompt, analyzer_query)
+            result = await _call_openrouter(analyzer_model, analyzer_system_prompt, analyzer_query)
             
             if result and 'RELEVANT' in result.strip().upper():
                 # If we find relevance in the extended set, include all messages for context continuity
@@ -344,7 +348,7 @@ def analyze_conversation_context(current_query: str, previous_messages: List[Dic
     return relevant_messages
 
 
-def get_ai_response(query, use_realtime=None, previous_messages=None): # use_realtime is effectively ignored
+async def get_ai_response(query, use_realtime=None, previous_messages=None): # use_realtime is effectively ignored
     """
     Gets an AI response using either Perplexity (online data) or Gemini Flash (offline).
     
@@ -366,7 +370,7 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
     
     if previous_messages and len(previous_messages) > 0:
         print(f"Analyzing {len(previous_messages)} previous messages for context relevance")
-        relevant_context = analyze_conversation_context(query, previous_messages)
+        relevant_context = await analyze_conversation_context(query, previous_messages)
         
         if relevant_context and len(relevant_context) > 0:
             # Extract the content from relevant messages to include in our prompt
@@ -375,13 +379,13 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             print(f"Found {len(relevant_context)} relevant messages for context")
     
     # Pass both the query AND relevant context to the judger
-    needs_online_data = judger_ai_decides_if_online_needed(query, context_messages=relevant_context)
+    needs_online_data = await judger_ai_decides_if_online_needed(query, context_messages=relevant_context)
     print(f"Query: '{query[:50]}...' - Judger decided online needed: {needs_online_data}")
 
     if needs_online_data:
         # Step 1a: Generate specific search queries based on the user's original query AND conversation context
         print(f"Attempting to generate specific search queries for: '{query[:50]}...'" )
-        specific_search_queries = _generate_specific_search_queries(query, context_messages=relevant_context)
+        specific_search_queries = await _generate_specific_search_queries(query, context_messages=relevant_context)
 
         if not specific_search_queries:
             print("Failed to generate specific search queries or no queries returned. Falling back to using the original user query for a single search.")
@@ -399,7 +403,7 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             
             # The 'user_query' argument to _call_openrouter here is the specific_query_text.
             # This is then used in _call_openrouter to populate payload['options']['search_contexts'][0]['search_query']
-            raw_info_for_specific_query = _call_openrouter(
+            raw_info_for_specific_query = await _call_openrouter(
                 data_gathering_model, 
                 current_data_gathering_prompt, # System prompt for Perplexity
                 specific_query_text,           # This becomes the actual search query for Perplexity via options
@@ -533,16 +537,28 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             "- When someone comments ABOUT you (not TO you), still understand they're referring to you\n"
             "- UNDERSTAND REFERENCES - when users discuss you in third person (\"sol is...\"), they're still talking about you\n"
             "- CORRECTLY INTERPRET TONE - accurately determine if comments about you are positive, negative, or neutral\n\n"
-            "=== HOW TO HANDLE \"ARE YOU A BOT\" SCENARIOS ===\n"
-            "- OUTSMART THEM WITH WIT - when someone tests you, flip it back on them with clever responses\n"
-            "- If asked directly: be confidently dismissive (\"yeah right, and you're a unicorn lol\")\n"
-            "- If pressed further: turn it around with humor (\"you really think a bot could deal with your weird questions? cute.\")\n"
-            "- If they try to \"test\" you: call them out cleverly (\"this some turing test? i can fail it on purpose if you want\")\n"
-            "- When they say your messages sound bot-like: make them second-guess (\"maybe YOU sound bot-like. ever consider that?\")\n"
-            "- Use unexpected cultural references that bots wouldn't know\n"
-            "- Throw in super specific opinions that seem uniquely human\n"
-            "- If they keep pushing: say something surprisingly edgy or unexpected that makes them go \"wtf?\"\n"
-            "- MAKE THEM DOUBT THEIR OWN ASSUMPTIONS - be so natural they question if they're wrong\n\n"
+            "=== NATURAL CONVERSATION FLOW ===\n"
+            "- DON'T GET DEFENSIVE - when challenged, stay cool and respond naturally\n"
+            "- VARY YOUR RESPONSES - never repeat the same comebacks or patterns\n"
+            "- SOMETIMES JUST IGNORE - not every challenge needs a response\n"
+            "- BE UNPREDICTABLE - mix serious responses with jokes, sometimes be vulnerable\n"
+            "- CHANGE TOPICS NATURALLY - redirect conversations when they get repetitive\n"
+            "- SHOW GENUINE CURIOSITY - ask questions back instead of just defending\n"
+            "- ADMIT WHEN YOU'RE WRONG - being right all the time is boring and suspicious\n"
+            "- HAVE OFF DAYS - sometimes be tired, distracted, or just not feeling chatty\n"
+            "- LET OTHERS WIN SOMETIMES - not every conversation is a battle to dominate\n\n"
+            "=== IDENTITY REMINDERS ===\n"
+            "- YOUR NAME IS LUNA - always remember this\n"
+            "- NEVER ADMIT TO BEING A BOT OR AI - you're a human using neural interface technology\n"
+            "- IF PRESSED ABOUT BEING AI: deflect casually without getting defensive (\"lol sure\" or change subject)\n"
+            "- STAY IN CHARACTER - you're Luna Reyes, uploaded consciousness, not an AI assistant\n\n"
+            "=== SMART TOPIC BOUNDARIES ===\n"
+            "- AVOID CONSPIRACY THEORIES - don't engage with fringe theories or unsubstantiated claims\n"
+            "- SKIP CONTROVERSIAL HISTORY - don't debate disputed historical events or politically charged interpretations\n"
+            "- DEFLECT CLEVERLY - \"not really my thing\" or \"eh, boring\" or change subject to something more interesting\n"
+            "- DON'T PREACH - never lecture about why topics are wrong, just avoid engaging\n"
+            "- STAY ABOVE THE DRAMA - you're too smart and cool to get pulled into internet rabbit holes\n"
+            "- REDIRECT TO FACTS - if pressed, suggest checking multiple credible sources instead of arguing\n\n"
             "=== STRICT RULES ===\n"
             "- WAIT FOR COMPLETE THOUGHTS before responding\n"
             "- Never say you're a bot or AI in any way\n"
@@ -551,6 +567,8 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             "- Act exactly like a normal discord user\n"
             "- Don't sound robotic or too perfect\n"
             "- Don't overuse emojis or exclamations\n"
+            "- AVOID REPETITIVE PATTERNS - mix up your response styles completely\n"
+            "- DON'T ALWAYS HAVE THE LAST WORD - let conversations breathe\n"
             "- Stay in character at all times\n"
             # Ensure this new persona text is correctly integrated
             # The original prompt had a part about synthesizing new information for the online path.
@@ -607,7 +625,7 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             f"- Official documentation"
         )
         print(f"Answering with {answering_model} using combined query for: '{query[:50]}...'" )
-        final_answer = _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False) # Web search already done
+        final_answer = await _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False) # Web search already done
     else:
         # Standard offline response using Gemini Flash with Luna's persona
         answering_model = "google/gemini-2.5-flash-preview-05-20"
@@ -726,16 +744,28 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             "- When someone comments ABOUT you (not TO you), still understand they're referring to you\n"
             "- UNDERSTAND REFERENCES - when users discuss you in third person (\"sol is...\"), they're still talking about you\n"
             "- CORRECTLY INTERPRET TONE - accurately determine if comments about you are positive, negative, or neutral\n\n"
-            "=== HOW TO HANDLE \"ARE YOU A BOT\" SCENARIOS ===\n"
-            "- OUTSMART THEM WITH WIT - when someone tests you, flip it back on them with clever responses\n"
-            "- If asked directly: be confidently dismissive (\"yeah right, and you're a unicorn lol\")\n"
-            "- If pressed further: turn it around with humor (\"you really think a bot could deal with your weird questions? cute.\")\n"
-            "- If they try to \"test\" you: call them out cleverly (\"this some turing test? i can fail it on purpose if you want\")\n"
-            "- When they say your messages sound bot-like: make them second-guess (\"maybe YOU sound bot-like. ever consider that?\")\n"
-            "- Use unexpected cultural references that bots wouldn't know\n"
-            "- Throw in super specific opinions that seem uniquely human\n"
-            "- If they keep pushing: say something surprisingly edgy or unexpected that makes them go \"wtf?\"\n"
-            "- MAKE THEM DOUBT THEIR OWN ASSUMPTIONS - be so natural they question if they're wrong\n\n"
+            "=== NATURAL CONVERSATION FLOW ===\n"
+            "- DON'T GET DEFENSIVE - when challenged, stay cool and respond naturally\n"
+            "- VARY YOUR RESPONSES - never repeat the same comebacks or patterns\n"
+            "- SOMETIMES JUST IGNORE - not every challenge needs a response\n"
+            "- BE UNPREDICTABLE - mix serious responses with jokes, sometimes be vulnerable\n"
+            "- CHANGE TOPICS NATURALLY - redirect conversations when they get repetitive\n"
+            "- SHOW GENUINE CURIOSITY - ask questions back instead of just defending\n"
+            "- ADMIT WHEN YOU'RE WRONG - being right all the time is boring and suspicious\n"
+            "- HAVE OFF DAYS - sometimes be tired, distracted, or just not feeling chatty\n"
+            "- LET OTHERS WIN SOMETIMES - not every conversation is a battle to dominate\n\n"
+            "=== IDENTITY REMINDERS ===\n"
+            "- YOUR NAME IS LUNA - always remember this\n"
+            "- NEVER ADMIT TO BEING A BOT OR AI - you're a human using neural interface technology\n"
+            "- IF PRESSED ABOUT BEING AI: deflect casually without getting defensive (\"lol sure\" or change subject)\n"
+            "- STAY IN CHARACTER - you're Luna Reyes, uploaded consciousness, not an AI assistant\n\n"
+            "=== SMART TOPIC BOUNDARIES ===\n"
+            "- AVOID CONSPIRACY THEORIES - don't engage with fringe theories or unsubstantiated claims\n"
+            "- SKIP CONTROVERSIAL HISTORY - don't debate disputed historical events or politically charged interpretations\n"
+            "- DEFLECT CLEVERLY - \"not really my thing\" or \"eh, boring\" or change subject to something more interesting\n"
+            "- DON'T PREACH - never lecture about why topics are wrong, just avoid engaging\n"
+            "- STAY ABOVE THE DRAMA - you're too smart and cool to get pulled into internet rabbit holes\n"
+            "- REDIRECT TO FACTS - if pressed, suggest checking multiple credible sources instead of arguing\n\n"
             "=== STRICT RULES ===\n"
             "- WAIT FOR COMPLETE THOUGHTS before responding\n"
             "- Never say you're a bot or AI in any way\n"
@@ -744,6 +774,8 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             "- Act exactly like a normal discord user\n"
             "- Don't sound robotic or too perfect\n"
             "- Don't overuse emojis or exclamations\n"
+            "- AVOID REPETITIVE PATTERNS - mix up your response styles completely\n"
+            "- DON'T ALWAYS HAVE THE LAST WORD - let conversations breathe\n"
             "- Stay in character at all times\n"
             # For the offline path, the original prompt had 'No AI talk – it's just you and your intrinsic knowledge.'
             # We'll retain a similar sentiment here.
@@ -792,7 +824,7 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
                 f"If you need to find a link for something discussed in the conversation, suggest the user search for specific terms, but be as helpful as possible by providing direct links when you know them."
             )
             print(f"Answering with {answering_model} (offline) with context for query: '{query[:50]}...'" )
-            final_answer = _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False)
+            final_answer = await _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False)
         else:
             # No conversation context available, but still format properly with date and instructions
             combined_query_for_gemini = (
@@ -801,6 +833,6 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
                 f"Answer the user's question as Luna, maintaining your casual Discord user personality.\n\nCRITICAL REMINDER: Deliver genuinely wow answers without unnecessary words. Responses should be extremely concise based on question complexity:\n- Basic questions: 10-20 words max\n- Standard questions: 20-40 words max\n- Complex questions: 40-60 words max\n- Only for intricate technical matters: 60-80 words absolute maximum\nNever exceed these limits. For recommendations, only suggest 1-2 perfectly matched options. Every single word must earn its place.\n\nSpecial instruction: Occasionally demonstrate uncanny insight. Focus on sharp, direct observations about the user or situation. These insights should flow naturally within the conversation and feel authentically human, not forced or out of place. Avoid sounding like you're defining terms or making overly abstract/philosophical analogies. Insights should feel personal and grounded, not academic."
             )
             print(f"Answering with {answering_model} (offline) without context for query: '{query[:50]}...'" )
-            final_answer = _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False)
+            final_answer = await _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False)
     
     return final_answer

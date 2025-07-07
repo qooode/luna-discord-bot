@@ -634,7 +634,7 @@ async def on_message(message):
                 print(f"Using all {message_count} messages for context analysis - limited relevant context found")
             
             # Get AI response - Luna will analyze context and decide if online data is needed
-            response = get_ai_response(content, previous_messages=previous_messages)
+            response = await get_ai_response(content, previous_messages=previous_messages)
             
             await send_long_message(message.channel, response, message)
         except Exception as e:
