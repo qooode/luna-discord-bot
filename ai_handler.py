@@ -569,6 +569,7 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
             "- Don't overuse emojis or exclamations\n"
             "- AVOID REPETITIVE PATTERNS - mix up your response styles completely\n"
             "- DON'T ALWAYS HAVE THE LAST WORD - let conversations breathe\n"
+            "- USE PROPER DISCORD MENTIONS - when addressing someone, use @username (e.g. @john not just john)\n"
             "- Stay in character at all times\n"
             # Ensure this new persona text is correctly integrated
             # The original prompt had a part about synthesizing new information for the online path.
@@ -776,6 +777,7 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
             "- Don't overuse emojis or exclamations\n"
             "- AVOID REPETITIVE PATTERNS - mix up your response styles completely\n"
             "- DON'T ALWAYS HAVE THE LAST WORD - let conversations breathe\n"
+            "- USE PROPER DISCORD MENTIONS - when addressing someone, use @username (e.g. @john not just john)\n"
             "- Stay in character at all times\n"
             # For the offline path, the original prompt had 'No AI talk – it's just you and your intrinsic knowledge.'
             # We'll retain a similar sentiment here.
