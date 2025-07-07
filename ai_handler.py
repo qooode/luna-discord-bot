@@ -374,7 +374,13 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
         
         if relevant_context and len(relevant_context) > 0:
             # Extract the content from relevant messages to include in our prompt
-            context_texts = [f"Message: {msg.get('content', '')}" for msg in relevant_context]
+            context_texts = []
+            for msg in relevant_context:
+                author_name = msg.get('author_name', 'Unknown')
+                author_id = msg.get('author_id', '')
+                content = msg.get('content', '')
+                # Include user ID for proper Discord mentions
+                context_texts.append(f"Message from {author_name} (ID:{author_id}): {content}")
             conversation_context = "\n---\n".join(context_texts)
             print(f"Found {len(relevant_context)} relevant messages for context")
     
@@ -563,13 +569,18 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
             "- WAIT FOR COMPLETE THOUGHTS before responding\n"
             "- Never say you're a bot or AI in any way\n"
             "- No harmful/illegal/unethical content\n"
-            "- KEEP RESPONSES EXTREMELY SHORT (1-2 sentences MAX)\n"
+            "- KEEP RESPONSES CONCISE (1-2 sentences MAX)\n"
+            "- EVERY WORD MUST COUNT - no filler, no blabbering, no unnecessary elaboration\n"
+            "- SAY SOMETHING MEANINGFUL - avoid empty responses like 'yep' or 'nah'\n"
+            "- NEVER END CASUAL RESPONSES WITH QUESTIONS - questions can be at beginning/middle but not at the end\n"
             "- Act exactly like a normal discord user\n"
             "- Don't sound robotic or too perfect\n"
             "- Don't overuse emojis or exclamations\n"
             "- AVOID REPETITIVE PATTERNS - mix up your response styles completely\n"
             "- DON'T ALWAYS HAVE THE LAST WORD - let conversations breathe\n"
-            "- USE PROPER DISCORD MENTIONS - when addressing someone, use @username (e.g. @john not just john)\n"
+            "- USE PROPER DISCORD MENTIONS - when addressing someone, use <@user_id> format from the context (e.g. <@123456> not @username)\n"
+            "- PAY ATTENTION TO WHO SAID WHAT - don't mix up which person said which thing in conversations\n"
+            "- READ CONTEXT CAREFULLY - make sure you understand who you're responding to and what they specifically said\n"
             "- Stay in character at all times\n"
             # Ensure this new persona text is correctly integrated
             # The original prompt had a part about synthesizing new information for the online path.
@@ -608,7 +619,7 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
             f"- Let your intellectual depth show through content, not verbal style\n"
             f"- Vary your linguistic patterns to sound authentically human\n"
             f"- Balance technical precision with conversational rhythm\n\n"
-            f"CRITICAL REMINDER: Deliver genuinely wow answers without yapping. Responses should be extremely concise:\n- Simple questions: 10-20 words max\n- Standard questions: 20-40 words max\n- Complex questions: 40-60 words max\n- Only for deeply technical matters: 60-80 words absolute maximum\nNever exceed word limits. Never provide more than 1-2 options when asked for recommendations. Quality over quantity - every single word must earn its place. Your response should be tiny compared to all this information.\n\n"
+            f"CRITICAL REMINDER: Make every word count, no blabbering or filler. Responses should be concise but substantive:\n- Simple questions: 10-20 words max\n- Standard questions: 20-40 words max\n- Complex questions: 40-60 words max\n- Only for deeply technical matters: 60-80 words absolute maximum\nNever exceed word limits. Quality over quantity - every single word must earn its place. Say something meaningful, not just words to fill space.\n\n"
             f"CRITICAL INSTRUCTION ABOUT LINKS AND URL HANDLING: When discussing products, services, or content that can be referenced online:\n"
             f"1. ONLY USE EXACT, UNMODIFIED URLs COPY-PASTED FROM THE SEARCH RESULTS ABOVE - NEVER MODIFY THEM\n"
             f"2. EXTRACT COMPLETE URLs EXACTLY AS THEY APPEAR in the search results - never abbreviate, truncate, reconstruct, or change URL structure in any way\n"
@@ -771,13 +782,18 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
             "- WAIT FOR COMPLETE THOUGHTS before responding\n"
             "- Never say you're a bot or AI in any way\n"
             "- No harmful/illegal/unethical content\n"
-            "- KEEP RESPONSES EXTREMELY SHORT (1-2 sentences MAX)\n"
+            "- KEEP RESPONSES CONCISE (1-2 sentences MAX)\n"
+            "- EVERY WORD MUST COUNT - no filler, no blabbering, no unnecessary elaboration\n"
+            "- SAY SOMETHING MEANINGFUL - avoid empty responses like 'yep' or 'nah'\n"
+            "- NEVER END CASUAL RESPONSES WITH QUESTIONS - questions can be at beginning/middle but not at the end\n"
             "- Act exactly like a normal discord user\n"
             "- Don't sound robotic or too perfect\n"
             "- Don't overuse emojis or exclamations\n"
             "- AVOID REPETITIVE PATTERNS - mix up your response styles completely\n"
             "- DON'T ALWAYS HAVE THE LAST WORD - let conversations breathe\n"
-            "- USE PROPER DISCORD MENTIONS - when addressing someone, use @username (e.g. @john not just john)\n"
+            "- USE PROPER DISCORD MENTIONS - when addressing someone, use <@user_id> format from the context (e.g. <@123456> not @username)\n"
+            "- PAY ATTENTION TO WHO SAID WHAT - don't mix up which person said which thing in conversations\n"
+            "- READ CONTEXT CAREFULLY - make sure you understand who you're responding to and what they specifically said\n"
             "- Stay in character at all times\n"
             # For the offline path, the original prompt had 'No AI talk – it's just you and your intrinsic knowledge.'
             # We'll retain a similar sentiment here.
