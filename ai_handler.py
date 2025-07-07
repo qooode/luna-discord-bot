@@ -781,8 +781,13 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             print(f"Answering with {answering_model} (offline) with context for query: '{query[:50]}...'" )
             final_answer = _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False)
         else:
-            # No conversation context, just use the direct query
-            print(f"Answering with {answering_model} (offline) for query: '{query[:50]}...'" )
-            final_answer = _call_openrouter(answering_model, persona_system_prompt_for_gemini, query, enable_web_search=False)
+            # No conversation context available, but still format properly with date and instructions
+            combined_query_for_gemini = (
+                f"🔴 TODAY'S DATE REFERENCE: {date_str} - Only use when discussing time-related matters (release dates, current events, etc). Do not mention the date in casual conversation. 🔴\n\n"
+                f"The user asked: \"{query}\"\n\n"
+                f"Answer the user's question as Luna, maintaining your casual Discord user personality.\n\nCRITICAL REMINDER: Deliver genuinely wow answers without unnecessary words. Responses should be extremely concise based on question complexity:\n- Basic questions: 10-20 words max\n- Standard questions: 20-40 words max\n- Complex questions: 40-60 words max\n- Only for intricate technical matters: 60-80 words absolute maximum\nNever exceed these limits. For recommendations, only suggest 1-2 perfectly matched options. Every single word must earn its place.\n\nSpecial instruction: Occasionally demonstrate uncanny insight. Focus on sharp, direct observations about the user or situation. These insights should flow naturally within the conversation and feel authentically human, not forced or out of place. Avoid sounding like you're defining terms or making overly abstract/philosophical analogies. Insights should feel personal and grounded, not academic."
+            )
+            print(f"Answering with {answering_model} (offline) without context for query: '{query[:50]}...'" )
+            final_answer = _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False)
     
     return final_answer
