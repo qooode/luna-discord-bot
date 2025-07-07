@@ -388,7 +388,7 @@ def get_ai_response(query, use_realtime=None, previous_messages=None): # use_rea
             specific_search_queries = [query] # Use original query as a single search item
 
         # Step 1b: Perplexity gathers raw data for each specific query
-        data_gathering_model = "perplexity/llama-3.1-sonar-small-128k-online" # User's preferred model
+        data_gathering_model = "perplexity/sonar" # User's preferred model
         # Enhanced prompt that emphasizes complete URLs
         data_gathering_system_prompt_template = "Find information and include COMPLETE, WORKING URLs for: {search_query}. Always provide the FULL URL with domain and path, never truncate or shorten URLs. When mentioning websites or content, always include the exact, complete URL. Format URLs properly as full links (https://example.com/full/path)."
         
