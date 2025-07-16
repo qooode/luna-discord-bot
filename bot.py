@@ -465,7 +465,7 @@ Create bullet points using exact message IDs. Format: • Name did something [ME
 CRITICAL: EXACTLY 8 bullets. 2-3 sentences per bullet. MAX 25 words per bullet."""
     
     summary = _call_openrouter(
-        "google/gemini-2.5-flash-preview-05-20",
+        "google/gemini-2.5-flash",
         system_prompt,
         user_prompt
     )
