@@ -90,7 +90,7 @@ async def _generate_specific_search_queries(user_original_query, context_message
         user_original_query: The current user query
         context_messages: Optional list of previous messages for context
     """
-    generator_model = "google/gemini-2.5-flash"
+    generator_model = CURRENT_AI_MODEL
     
     # Extract main topic from context if available
     main_topic = "unknown"
@@ -233,7 +233,7 @@ async def judger_ai_decides_if_online_needed(user_query, context_messages=None):
         user_query: The current user query
         context_messages: Optional list of previous messages for context
     """
-    judger_model = "google/gemini-2.5-flash"
+    judger_model = CURRENT_AI_MODEL
     
     # Format context messages for better analysis
     context_info = ""
@@ -334,8 +334,8 @@ async def analyze_conversation_context(current_query: str, previous_messages: Li
     # Simple relevance detection (can be enhanced with more sophisticated methods)
     relevant_messages = []
     
-    # Use Gemini Flash for quick relevance judgment
-    analyzer_model = "google/gemini-2.5-flash"
+    # Use current AI model for quick relevance judgment
+    analyzer_model = CURRENT_AI_MODEL
     
     # Analyze initial batch of messages
     batch_relevant = False
