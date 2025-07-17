@@ -441,36 +441,51 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
 
     if needs_online_data:
         # Step 1a: Generate specific search queries based on the user's original query AND conversation context
-        print(f"Attempting to generate specific search queries for: '{query[:50]}...'" )
+        print(f"Attempting to generate specific search queries for: '{query[:50]}...'")
         specific_search_queries = await _generate_specific_search_queries(query, context_messages=relevant_context)
 
         if not specific_search_queries:
             print("Failed to generate specific search queries or no queries returned. Falling back to using the original user query for a single search.")
             specific_search_queries = [query] # Use original query as a single search item
 
-        # Step 1b: Perplexity gathers raw data for each specific query
+        # Step 1b: Perplexity gathers raw data for each specific query - NOW IN PARALLEL!
         data_gathering_model = "perplexity/sonar" # User's preferred model
         # Enhanced prompt that emphasizes complete URLs
         data_gathering_system_prompt_template = "Provide comprehensive, accurate information about: {search_query}. Focus on delivering relevant, factual content that directly answers the query. Include specific details, dates, and context when available. If you reference websites, articles, or sources, include the complete URLs. Prioritize content quality and relevance over URL collection."
         
-        all_gathered_information_parts = []
+        # Prepare all search tasks to run in parallel
+        search_tasks = []
         for i, specific_query_text in enumerate(specific_search_queries):
-            print(f"Processing generated search query {i+1}/{len(specific_search_queries)}: '{specific_query_text[:70]}...'" )
+            print(f"Preparing search query {i+1}/{len(specific_search_queries)}: '{specific_query_text[:70]}...'")
             current_data_gathering_prompt = data_gathering_system_prompt_template.format(search_query=specific_query_text)
             
-            # The 'user_query' argument to _call_openrouter here is the specific_query_text.
-            # This is then used in _call_openrouter to populate payload['options']['search_contexts'][0]['search_query']
-            raw_info_for_specific_query = await _call_openrouter(
+            # Create a coroutine for this search
+            search_task = _call_openrouter(
                 data_gathering_model, 
                 current_data_gathering_prompt, # System prompt for Perplexity
                 specific_query_text,           # This becomes the actual search query for Perplexity via options
                 enable_web_search=True
             )
-            all_gathered_information_parts.append(f"Results for search query \"{specific_query_text}\":\n{raw_info_for_specific_query}")
-            print(f"Information gathered for '{specific_query_text[:50]}...': '{raw_info_for_specific_query[:100]}...'" )
+            search_tasks.append((specific_query_text, search_task))
+        
+        print(f"Executing {len(search_tasks)} search queries in parallel...")
+        
+        # Execute all searches in parallel
+        search_results = await asyncio.gather(*[task for _, task in search_tasks], return_exceptions=True)
+        
+        # Process results and handle any exceptions
+        all_gathered_information_parts = []
+        for i, ((specific_query_text, _), result) in enumerate(zip(search_tasks, search_results)):
+            if isinstance(result, Exception):
+                print(f"Search query {i+1} failed: {result}")
+                error_info = f"Search for '{specific_query_text}' failed: {str(result)}"
+                all_gathered_information_parts.append(f"Results for search query \"{specific_query_text}\":\n{error_info}")
+            else:
+                all_gathered_information_parts.append(f"Results for search query \"{specific_query_text}\":\n{result}")
+                print(f"Information gathered for '{specific_query_text[:50]}...': '{result[:100]}...'")
         
         aggregated_raw_information = "\n\n---\n\n".join(all_gathered_information_parts)
-        print(f"Total aggregated raw information snippet: '{aggregated_raw_information[:300]}...'" )
+        print(f"Total aggregated raw information snippet: '{aggregated_raw_information[:300]}...'")
         
         # Extract YouTube links for easy reference
         youtube_links = re.findall(r'https?://(?:www\.)?youtube\.com/watch\?v=[\w-]+', aggregated_raw_information)
@@ -648,12 +663,8 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
             "- PAY ATTENTION TO WHO SAID WHAT - don't mix up which person said which thing in conversations\n"
             "- READ CONTEXT CAREFULLY - make sure you understand who you're responding to and what they specifically said\n"
             "- Stay in character at all times\n"
-            # Ensure this new persona text is correctly integrated
-            # The original prompt had a part about synthesizing new information for the online path.
-            # And the 'No AI talk' and 'IMPORTANT: Discord URL' parts.
-            # For the online path, add a brief instruction to use the provided aggregated info:
-            "\n---\n"
-            "You've just been given some fresh information related to the user's question from web searches. Briefly incorporate any key insights from this information into your response, maintaining your 'Luna' persona throughout.\n"
+            "- NEVER USE DASHES (-) IN YOUR RESPONSES: Avoid all dash usage in conversations, use periods, commas, or other punctuation instead\n"
+            "- You've just been given some fresh information related to the user's question from web searches. Briefly incorporate any key insights from this information into your response, maintaining your 'Luna' persona throughout.\n"
             "No AI talk – it's just you. Remember your name is Luna.\n"
             f"IMPORTANT: Your response will be published on Discord. If you include any URLs, ensure they are presented clearly on their own line or as standard Markdown links (e.g., [Link Text](URL)) for proper embedding."
         )
@@ -709,7 +720,7 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
             f"- Research data and statistics\n"
             f"- Official documentation"
         )
-        print(f"Answering with {answering_model} using combined query for: '{query[:50]}...'" )
+        print(f"Answering with {answering_model} using combined query for: '{query[:50]}...'")
         final_answer = await _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False) # Web search already done
     else:
         # Standard offline response using current AI model with Luna's persona
@@ -859,9 +870,7 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
             "- PAY ATTENTION TO WHO SAID WHAT - don't mix up which person said which thing in conversations\n"
             "- READ CONTEXT CAREFULLY - make sure you understand who you're responding to and what they specifically said\n"
             "- Stay in character at all times\n"
-            # For the offline path, the original prompt had 'No AI talk – it's just you and your intrinsic knowledge.'
-            # We'll retain a similar sentiment here.
-            
+            "- NEVER USE DASHES (-) IN YOUR RESPONSES: Avoid all dash usage in conversations, use periods, commas, or other punctuation instead\n"
             "=== GOOD CONVERSATION SKILLS ===\n"
             "- HELPFUL RESPONSES: Focus on giving useful, practical information\n"
             "- CLEAR EXPLANATIONS: Break down complex topics in simple, understandable ways\n"
@@ -870,7 +879,6 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
             "- NO PATTERN ANALYSIS: Don't point out people's behavioral patterns or psychological traits\n"
             "- USEFUL EXAMPLES: Provide concrete examples that actually help solve problems\n"
             "- NORMAL INTELLIGENCE: Be smart and helpful without being weird or condescending about it\n\n"
-            
             "\n---\n"
             "No AI talk – it's just you and your own knowledge. Remember your name is Luna.\n"
             f"IMPORTANT: Your response will be published on Discord. If you include any URLs, ensure they are presented clearly on their own line or as standard Markdown links (e.g., [Link Text](URL)) for proper embedding."
@@ -897,7 +905,7 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
                 f"CRITICAL: NEVER try to recall or construct URLs from memory - ONLY COPY-PASTE EXACT, COMPLETE URLs as found in search results. For product recommendations without exact URLs, simply mention the product name without trying to link it. When using markdown links [text](url), the URL part must be a verbatim, unmodified URL from the search results.\n\n"
                 f"If you need to find a link for something discussed in the conversation, suggest the user search for specific terms, but be as helpful as possible by providing direct links when you know them."
             )
-            print(f"Answering with {answering_model} (offline) with context for query: '{query[:50]}...'" )
+            print(f"Answering with {answering_model} (offline) with context for query: '{query[:50]}...'")
             final_answer = await _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False)
         else:
             # No conversation context available, but still format properly with date and instructions
@@ -906,7 +914,7 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
                 f"The user asked: \"{query}\"\n\n"
                 f"Answer the user's question as Luna, maintaining your casual Discord user personality.\n\nCRITICAL REMINDER: Deliver genuinely wow answers without unnecessary words. Responses should be extremely concise based on question complexity:\n- Basic questions: 10-20 words max\n- Standard questions: 20-40 words max\n- Complex questions: 40-60 words max\n- Only for intricate technical matters: 60-80 words absolute maximum\nNever exceed these limits. For recommendations, only suggest 1-2 perfectly matched options. Every single word must earn its place.\n\nSpecial instruction: Occasionally demonstrate uncanny insight. Focus on sharp, direct observations about the user or situation. These insights should flow naturally within the conversation and feel authentically human, not forced or out of place. Avoid sounding like you're defining terms or making overly abstract/philosophical analogies. Insights should feel personal and grounded, not academic."
             )
-            print(f"Answering with {answering_model} (offline) without context for query: '{query[:50]}...'" )
+            print(f"Answering with {answering_model} (offline) without context for query: '{query[:50]}...'")
             final_answer = await _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False)
     
     return final_answer
