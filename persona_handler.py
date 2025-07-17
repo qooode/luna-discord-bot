@@ -13,11 +13,15 @@ class PersonaHandler:
         try:
             if os.path.exists(self.personas_file):
                 with open(self.personas_file, 'r') as f:
-                    return json.load(f)
-            return {"global": None, "users": {}}
+                    data = json.load(f)
+                    # Ensure the new structure exists
+                    if "premium_roles" not in data:
+                        data["premium_roles"] = []
+                    return data
+            return {"global": None, "users": {}, "premium_roles": []}
         except Exception as e:
             print(f"Error loading personas: {e}")
-            return {"global": None, "users": {}}
+            return {"global": None, "users": {}, "premium_roles": []}
     
     def _save_personas(self):
         """Save personas to file"""
@@ -128,6 +132,48 @@ class PersonaHandler:
             status += "**Luna will use:** Default Luna personality"
         
         return status
+    
+    def add_premium_role(self, role_id: str) -> str:
+        """Add a role to the premium roles list"""
+        try:
+            role_id = str(role_id)  # Ensure it's a string
+            if role_id not in self.personas["premium_roles"]:
+                self.personas["premium_roles"].append(role_id)
+                self._save_personas()
+                return f"✅ Role added to premium persona access!"
+            else:
+                return f"ℹ️ Role already has premium persona access."
+        except Exception as e:
+            return f"❌ Error adding role: {str(e)}"
+    
+    def remove_premium_role(self, role_id: str) -> str:
+        """Remove a role from the premium roles list"""
+        try:
+            role_id = str(role_id)  # Ensure it's a string
+            if role_id in self.personas["premium_roles"]:
+                self.personas["premium_roles"].remove(role_id)
+                self._save_personas()
+                return f"✅ Role removed from premium persona access!"
+            else:
+                return f"ℹ️ Role doesn't have premium persona access."
+        except Exception as e:
+            return f"❌ Error removing role: {str(e)}"
+    
+    def has_premium_access(self, user_roles: list) -> bool:
+        """Check if user has any of the premium roles"""
+        if not self.personas["premium_roles"]:
+            return True  # If no premium roles are set, everyone has access
+        
+        user_role_ids = [str(role.id) for role in user_roles]
+        return any(role_id in self.personas["premium_roles"] for role_id in user_role_ids)
+    
+    def get_premium_roles_list(self) -> str:
+        """Get formatted list of premium roles"""
+        if not self.personas["premium_roles"]:
+            return "ℹ️ No premium roles set. All users can use /setmypersona."
+        
+        role_list = "\n".join([f"• <@&{role_id}>" for role_id in self.personas["premium_roles"]])
+        return f"**Premium Persona Roles:**\n{role_list}"
 
 # Global instance
 persona_handler = PersonaHandler()

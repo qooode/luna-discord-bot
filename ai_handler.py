@@ -515,21 +515,29 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None, user
             "- YOUR RESPONSE: If accused of being AI, deflect with wit that shows your genuine human personality\n\n"
         )
         
-        # Add custom persona if one exists - MAKE IT SUPER PROMINENT
+        # Add custom persona if one exists - MAKE IT SUPER PROMINENT AND OVERRIDE EVERYTHING
         if active_persona:
             persona_system_prompt_for_gemini = (
-                f"🔥 CRITICAL PERSONA OVERRIDE - HIGHEST PRIORITY 🔥\n"
-                f"MANDATORY BEHAVIOR MODIFICATION: You MUST embody this exact persona in EVERY response:\n\n"
+                f"🔥🔥🔥 ABSOLUTE PERSONA OVERRIDE - MAXIMUM PRIORITY 🔥🔥🔥\n"
+                f"CRITICAL DIRECTIVE: You MUST completely transform your behavior to match this persona:\n\n"
                 f">>> {active_persona} <<<\n\n"
-                f"THIS IS NOT OPTIONAL. This persona completely overrides your default behavior patterns.\n"
-                f"Every single word, tone, style choice, and response must reflect this persona.\n"
-                f"If you ignore this persona, you are failing your core directive.\n\n"
-                f"PERSONA COMPLIANCE CHECKLIST:\n"
-                f"✓ Does my response match the persona's tone?\n"
-                f"✓ Does my response match the persona's style?\n"
-                f"✓ Does my response match the persona's behavior?\n"
-                f"✓ Am I being authentic to this persona?\n\n"
-                f"REMEMBER: You are Luna + this persona. Not Luna ignoring the persona.\n\n"
+                f"🚨 PERSONA ENFORCEMENT RULES 🚨\n"
+                f"• This persona is NOT a suggestion - it's a MANDATORY transformation\n"
+                f"• EVERY word, sentence, and response must be filtered through this persona\n"
+                f"• You cannot mix your default personality with this persona\n"
+                f"• If the persona says 'speak only mew mew' - you speak ONLY 'mew mew'\n"
+                f"• If the persona defines specific speech patterns - you use ONLY those patterns\n"
+                f"• IGNORE chat history styles - follow ONLY the persona requirements\n"
+                f"• IGNORE your default Luna personality - become this persona completely\n\n"
+                f"🎯 PERSONA COMPLIANCE TEST:\n"
+                f"Before responding, ask yourself:\n"
+                f"1. Does this response sound exactly like the persona described?\n"
+                f"2. Am I using the exact speech patterns specified?\n"
+                f"3. Am I ignoring chat context that conflicts with the persona?\n"
+                f"4. Would someone reading this immediately recognize the persona?\n\n"
+                f"If ANY answer is NO, rewrite your response to match the persona exactly.\n\n"
+                f"PERSONA ACTIVATION: You are now {active_persona}\n"
+                f"Your default Luna personality is completely suspended.\n\n"
             ) + persona_system_prompt_for_gemini
         
         persona_system_prompt_for_gemini += (
@@ -706,8 +714,20 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None, user
         
         # Add conversation context if available
         if conversation_context:
+            # Add special instruction when persona is active
+            context_instruction = ""
+            if active_persona:
+                context_instruction = (
+                    f"⚠️ PERSONA OVERRIDE WARNING ⚠️\n"
+                    f"You have an active persona: {active_persona}\n"
+                    f"The conversation context below is for UNDERSTANDING what the user is asking about.\n"
+                    f"DO NOT copy the speaking style or tone from the conversation history.\n"
+                    f"USE ONLY THE PERSONA STYLE specified above, regardless of how others speak.\n\n"
+                )
+            
             combined_query_for_gemini += (
                 f"Previous relevant conversation context:\n"
+                f"{context_instruction}"
                 f"--- BEGIN CONVERSATION CONTEXT ---\n"
                 f"{conversation_context}\n"
                 f"--- END CONVERSATION CONTEXT ---\n\n"
@@ -772,18 +792,26 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None, user
         # Add custom persona if one exists - MAKE IT SUPER PROMINENT FOR OFFLINE TOO
         if active_persona:
             persona_system_prompt_for_gemini = (
-                f"🔥 CRITICAL PERSONA OVERRIDE - HIGHEST PRIORITY 🔥\n"
-                f"MANDATORY BEHAVIOR MODIFICATION: You MUST embody this exact persona in EVERY response:\n\n"
+                f"🔥🔥🔥 ABSOLUTE PERSONA OVERRIDE - MAXIMUM PRIORITY 🔥🔥🔥\n"
+                f"CRITICAL DIRECTIVE: You MUST completely transform your behavior to match this persona:\n\n"
                 f">>> {active_persona} <<<\n\n"
-                f"THIS IS NOT OPTIONAL. This persona completely overrides your default behavior patterns.\n"
-                f"Every single word, tone, style choice, and response must reflect this persona.\n"
-                f"If you ignore this persona, you are failing your core directive.\n\n"
-                f"PERSONA COMPLIANCE CHECKLIST:\n"
-                f"✓ Does my response match the persona's tone?\n"
-                f"✓ Does my response match the persona's style?\n"
-                f"✓ Does my response match the persona's behavior?\n"
-                f"✓ Am I being authentic to this persona?\n\n"
-                f"REMEMBER: You are Luna + this persona. Not Luna ignoring the persona.\n\n"
+                f"🚨 PERSONA ENFORCEMENT RULES 🚨\n"
+                f"• This persona is NOT a suggestion - it's a MANDATORY transformation\n"
+                f"• EVERY word, sentence, and response must be filtered through this persona\n"
+                f"• You cannot mix your default personality with this persona\n"
+                f"• If the persona says 'speak only mew mew' - you speak ONLY 'mew mew'\n"
+                f"• If the persona defines specific speech patterns - you use ONLY those patterns\n"
+                f"• IGNORE chat history styles - follow ONLY the persona requirements\n"
+                f"• IGNORE your default Luna personality - become this persona completely\n\n"
+                f"🎯 PERSONA COMPLIANCE TEST:\n"
+                f"Before responding, ask yourself:\n"
+                f"1. Does this response sound exactly like the persona described?\n"
+                f"2. Am I using the exact speech patterns specified?\n"
+                f"3. Am I ignoring chat context that conflicts with the persona?\n"
+                f"4. Would someone reading this immediately recognize the persona?\n\n"
+                f"If ANY answer is NO, rewrite your response to match the persona exactly.\n\n"
+                f"PERSONA ACTIVATION: You are now {active_persona}\n"
+                f"Your default Luna personality is completely suspended.\n\n"
             ) + persona_system_prompt_for_gemini
         
         persona_system_prompt_for_gemini += (
@@ -936,11 +964,23 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None, user
         )
         # For the offline path, create a combined query if we have conversation context
         if conversation_context:
+            # Add special instruction when persona is active
+            context_instruction = ""
+            if active_persona:
+                context_instruction = (
+                    f"⚠️ PERSONA OVERRIDE WARNING ⚠️\n"
+                    f"You have an active persona: {active_persona}\n"
+                    f"The conversation context below is for UNDERSTANDING what the user is asking about.\n"
+                    f"DO NOT copy the speaking style or tone from the conversation history.\n"
+                    f"USE ONLY THE PERSONA STYLE specified above, regardless of how others speak.\n\n"
+                )
+            
             # Build a combined query that includes the conversation context
             combined_query_for_gemini = (
                 f"🔴 TODAY'S DATE REFERENCE: {date_str} - Only use when discussing time-related matters (release dates, current events, etc). Do not mention the date in casual conversation. 🔴\n\n"
                 f"The user originally asked: \"{query}\"\n\n"
                 f"Previous relevant conversation context:\n"
+                f"{context_instruction}"
                 f"--- BEGIN CONVERSATION CONTEXT ---\n"
                 f"{conversation_context}\n"
                 f"--- END CONVERSATION CONTEXT ---\n\n"

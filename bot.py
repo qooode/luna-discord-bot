@@ -327,11 +327,31 @@ async def setglobalpersona_command(interaction: discord.Interaction, persona: st
 @client.tree.command(name="setmypersona", description="Set your personal Luna persona")
 @app_commands.describe(persona="How should Luna behave when talking to you? (e.g., 'Be more technical and direct')")
 async def setmypersona_command(interaction: discord.Interaction, persona: str):
+    # Check if user has premium access
+    if not persona_handler.has_premium_access(interaction.user.roles):
+        await interaction.response.send_message(
+            "❌ **Premium Access Required**\n\n"
+            "You don't have premium access to use the `/setmypersona` command. "
+            "Please contact an administrator to get the required role.",
+            ephemeral=True
+        )
+        return
+    
     result = persona_handler.set_user_persona(str(interaction.user.id), persona)
     await interaction.response.send_message(result, ephemeral=True)
 
 @client.tree.command(name="removemypersona", description="Remove your personal Luna persona")
 async def removemypersona_command(interaction: discord.Interaction):
+    # Check if user has premium access
+    if not persona_handler.has_premium_access(interaction.user.roles):
+        await interaction.response.send_message(
+            "❌ **Premium Access Required**\n\n"
+            "You don't have premium access to use the `/removemypersona` command. "
+            "Please contact an administrator to get the required role.",
+            ephemeral=True
+        )
+        return
+    
     result = persona_handler.remove_user_persona(str(interaction.user.id))
     await interaction.response.send_message(result, ephemeral=True)
 
@@ -348,6 +368,38 @@ async def removeglobalpersona_command(interaction: discord.Interaction):
 @client.tree.command(name="personastatus", description="Check current persona settings")
 async def personastatus_command(interaction: discord.Interaction):
     result = persona_handler.get_status(str(interaction.user.id))
+    await interaction.response.send_message(result, ephemeral=True)
+
+@client.tree.command(name="addpremiumrole", description="Add a role to premium persona access (Admin only)")
+@app_commands.describe(role="Role to add to premium persona access")
+async def addpremiumrole_command(interaction: discord.Interaction, role: discord.Role):
+    # Check if user is admin
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Only administrators can use this command!", ephemeral=True)
+        return
+    
+    result = persona_handler.add_premium_role(str(role.id))
+    await interaction.response.send_message(f"{result}\n\n**Role:** {role.mention}", ephemeral=True)
+
+@client.tree.command(name="removepremiumrole", description="Remove a role from premium persona access (Admin only)")
+@app_commands.describe(role="Role to remove from premium persona access")
+async def removepremiumrole_command(interaction: discord.Interaction, role: discord.Role):
+    # Check if user is admin
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Only administrators can use this command!", ephemeral=True)
+        return
+    
+    result = persona_handler.remove_premium_role(str(role.id))
+    await interaction.response.send_message(f"{result}\n\n**Role:** {role.mention}", ephemeral=True)
+
+@client.tree.command(name="listpremiumroles", description="List all premium persona roles (Admin only)")
+async def listpremiumroles_command(interaction: discord.Interaction):
+    # Check if user is admin
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Only administrators can use this command!", ephemeral=True)
+        return
+    
+    result = persona_handler.get_premium_roles_list()
     await interaction.response.send_message(result, ephemeral=True)
 
 @client.tree.command(name="help", description="Show all available commands and features")
@@ -424,12 +476,22 @@ async def help_command(interaction: discord.Interaction):
     # Persona Features
     embed.add_field(
         name="🎭 Persona Customization",
-        value="• `/setmypersona <description>` - Set your personal Luna style\n"
+        value="• `/setmypersona <description>` - Set your personal Luna style (Premium)\n"
               "• `/setglobalpersona <description>` - Set global Luna style (Admin only)\n"
-              "• `/removemypersona` - Remove your personal persona\n"
+              "• `/removemypersona` - Remove your personal persona (Premium)\n"
               "• `/removeglobalpersona` - Remove global persona (Admin only)\n"
               "• `/personastatus` - Check current persona settings\n"
               "• **Smart filtering** - Prevents abuse and inappropriate content",
+        inline=False
+    )
+    
+    # Premium Role Management (Admin only)
+    embed.add_field(
+        name="👑 Premium Role Management (Admin Only)",
+        value="• `/addpremiumrole <role>` - Add role to premium persona access\n"
+              "• `/removepremiumrole <role>` - Remove role from premium persona access\n"
+              "• `/listpremiumroles` - List all premium persona roles\n"
+              "• **Access control** - Manage who can use persona features",
         inline=False
     )
     
