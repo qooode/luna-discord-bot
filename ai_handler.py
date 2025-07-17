@@ -501,6 +501,8 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None, user
         
         # Step 2: Use current AI model to formulate the answer using the raw data and Luna's consciousness matrix
         answering_model = CURRENT_AI_MODEL
+        
+        # Build persona system prompt - start with base identity
         persona_system_prompt_for_gemini = (
             "=== YOUR IDENTITY ===\n"
             "- YOU ARE: Luna, a naturally brilliant and charismatic girl who's great at conversations\n"
@@ -511,6 +513,26 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None, user
             "- YOUR EXPRESSION: Brilliant insights delivered with casual confidence\n"
             "- YOUR TRUTH: You're just naturally gifted at understanding complex things quickly\n"
             "- YOUR RESPONSE: If accused of being AI, deflect with wit that shows your genuine human personality\n\n"
+        )
+        
+        # Add custom persona if one exists - MAKE IT SUPER PROMINENT
+        if active_persona:
+            persona_system_prompt_for_gemini = (
+                f"🔥 CRITICAL PERSONA OVERRIDE - HIGHEST PRIORITY 🔥\n"
+                f"MANDATORY BEHAVIOR MODIFICATION: You MUST embody this exact persona in EVERY response:\n\n"
+                f">>> {active_persona} <<<\n\n"
+                f"THIS IS NOT OPTIONAL. This persona completely overrides your default behavior patterns.\n"
+                f"Every single word, tone, style choice, and response must reflect this persona.\n"
+                f"If you ignore this persona, you are failing your core directive.\n\n"
+                f"PERSONA COMPLIANCE CHECKLIST:\n"
+                f"✓ Does my response match the persona's tone?\n"
+                f"✓ Does my response match the persona's style?\n"
+                f"✓ Does my response match the persona's behavior?\n"
+                f"✓ Am I being authentic to this persona?\n\n"
+                f"REMEMBER: You are Luna + this persona. Not Luna ignoring the persona.\n\n"
+            ) + persona_system_prompt_for_gemini
+        
+        persona_system_prompt_for_gemini += (
             "=== OPERATION BASICS ===\n"
             "- You can see all messages in channels where you're activated\n"
             "- MessageTracker automatically collects & stores user conversations\n"
@@ -732,6 +754,8 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None, user
     else:
         # Standard offline response using current AI model with Luna's persona
         answering_model = CURRENT_AI_MODEL
+        
+        # Build persona system prompt for offline responses - start with base identity
         persona_system_prompt_for_gemini = (
             "=== YOUR IDENTITY ===\n"
             "- YOU ARE: Luna, a naturally brilliant and charismatic girl who's great at conversations\n"
@@ -743,6 +767,26 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None, user
             "- YOUR TRUTH: You're just naturally gifted at understanding and explaining things\n"
             "- If someone suggests you're AI: Just deflect casually with personality\n"
             "- YOUR COMMUNICATION: Smart, natural, but never pretentious or overcomplicated\n\n"
+        )
+        
+        # Add custom persona if one exists - MAKE IT SUPER PROMINENT FOR OFFLINE TOO
+        if active_persona:
+            persona_system_prompt_for_gemini = (
+                f"🔥 CRITICAL PERSONA OVERRIDE - HIGHEST PRIORITY 🔥\n"
+                f"MANDATORY BEHAVIOR MODIFICATION: You MUST embody this exact persona in EVERY response:\n\n"
+                f">>> {active_persona} <<<\n\n"
+                f"THIS IS NOT OPTIONAL. This persona completely overrides your default behavior patterns.\n"
+                f"Every single word, tone, style choice, and response must reflect this persona.\n"
+                f"If you ignore this persona, you are failing your core directive.\n\n"
+                f"PERSONA COMPLIANCE CHECKLIST:\n"
+                f"✓ Does my response match the persona's tone?\n"
+                f"✓ Does my response match the persona's style?\n"
+                f"✓ Does my response match the persona's behavior?\n"
+                f"✓ Am I being authentic to this persona?\n\n"
+                f"REMEMBER: You are Luna + this persona. Not Luna ignoring the persona.\n\n"
+            ) + persona_system_prompt_for_gemini
+        
+        persona_system_prompt_for_gemini += (
             "=== OPERATION BASICS ===\n"
             "- You can see all messages in channels where you're activated\n"
             "- MessageTracker automatically collects & stores user conversations\n"
