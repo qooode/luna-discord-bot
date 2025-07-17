@@ -7,6 +7,7 @@ from discord import app_commands
 from ai_handler import get_ai_response, set_ai_model, get_current_ai_model
 from link_handler import handle_links
 from temp_channels import TempChannelManager
+from persona_handler import persona_handler
 
 # Load environment variables
 load_dotenv()
@@ -383,6 +384,18 @@ async def help_command(interaction: discord.Interaction):
         inline=False
     )
     
+    # Persona Features
+    embed.add_field(
+        name="🎭 Persona Customization",
+        value="• `/setmypersona <description>` - Set your personal Luna style\n"
+              "• `/setglobalpersona <description>` - Set global Luna style (Admin only)\n"
+              "• `/removemypersona` - Remove your personal persona\n"
+              "• `/removeglobalpersona` - Remove global persona (Admin only)\n"
+              "• `/personastatus` - Check current persona settings\n"
+              "• **Smart filtering** - Prevents abuse and inappropriate content",
+        inline=False
+    )
+    
     # Usage Examples
     embed.add_field(
         name="💡 Quick Examples",
@@ -390,7 +403,8 @@ async def help_command(interaction: discord.Interaction):
               "• `/temp debug session public 1h` - Create 1-hour debug channel\n"
               "• `/temp planning meeting private 30min` - Private 30-min meeting\n"
               "• `/summarize count:200` - Summarize last 200 messages\n"
-              "• `/luna listen here` - Enable Luna in current channel",
+              "• `/luna listen here` - Enable Luna in current channel\n"
+              "• `/setmypersona Be more casual and use gaming terms` - Personalize Luna",
         inline=False
     )
     
@@ -674,7 +688,7 @@ async def on_message(message):
                 print(f"Using all {message_count} messages for context analysis - limited relevant context found")
             
             # Get AI response - Luna will analyze context and decide if online data is needed
-            response = await get_ai_response(content, previous_messages=previous_messages)
+            response = await get_ai_response(content, previous_messages=previous_messages, user_id=message.author.id)
             
             await send_long_message(message.channel, response, message)
         except Exception as e:

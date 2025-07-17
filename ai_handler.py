@@ -7,6 +7,7 @@ import datetime
 import re  # Added for regex pattern matching
 from typing import List, Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
+from persona_handler import persona_handler
 
 # Load environment variables
 load_dotenv()
@@ -399,7 +400,7 @@ async def analyze_conversation_context(current_query: str, previous_messages: Li
     return relevant_messages
 
 
-async def get_ai_response(query, use_realtime=None, previous_messages=None): # use_realtime is effectively ignored
+async def get_ai_response(query, use_realtime=None, previous_messages=None, user_id=None): # use_realtime is effectively ignored
     """
     Gets an AI response using either Perplexity (online data) or Gemini Flash (offline).
     
@@ -411,6 +412,7 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
         use_realtime: Legacy parameter, effectively ignored (judger makes the decision)
         previous_messages: Optional list of previous messages in the conversation
                           Each should be a dict with at least a 'content' key
+        user_id: Discord user ID for persona lookup
     """
     current_datetime = datetime.datetime.now()
     date_str = current_datetime.strftime("%A, %B %d, %Y")
@@ -434,6 +436,11 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
                 context_texts.append(f"Message from {author_name} (ID:{author_id}): {content}")
             conversation_context = "\n---\n".join(context_texts)
             print(f"Found {len(relevant_context)} relevant messages for context")
+    
+    # Get persona for this user
+    active_persona = None
+    if user_id:
+        active_persona = persona_handler.get_persona(str(user_id))
     
     # Pass both the query AND relevant context to the judger
     needs_online_data = await judger_ai_decides_if_online_needed(query, context_messages=relevant_context)
