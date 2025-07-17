@@ -14,6 +14,19 @@ load_dotenv()
 # Get OpenRouter API key from environment variables
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 
+# Global variable to store the current AI model
+CURRENT_AI_MODEL = "google/gemini-2.5-flash"
+
+def set_ai_model(model_name):
+    """Set the AI model to use for responses"""
+    global CURRENT_AI_MODEL
+    CURRENT_AI_MODEL = model_name
+    return CURRENT_AI_MODEL
+
+def get_current_ai_model():
+    """Get the currently set AI model"""
+    return CURRENT_AI_MODEL
+
 async def _call_openrouter(model_name, system_prompt, user_query, enable_web_search=False):
     """Helper function to make calls to OpenRouter."""
     headers = {
@@ -129,6 +142,14 @@ User asks: "link?" (after discussing minecraft trailer)
 ★ CORRECT: ["minecraft movie official trailer link", "minecraft trailer youtube"]
 ★ WRONG: ["what does link mean", "how to create links"]
 
+User asks: "what do you think about iOS 26" or "thoughts on the new iPhone"
+★ CORRECT: ["reddit iOS 26 opinions", "reddit iPhone thoughts discussion", "reddit iOS 26 review"]
+★ WRONG: ["iOS 26 features", "iPhone specifications", "iOS 26 release date"]
+
+User asks: "what's your opinion on Python vs JavaScript"
+★ CORRECT: ["reddit Python vs JavaScript opinions", "reddit Python JavaScript debate", "reddit programming language opinions"]
+★ WRONG: ["Python vs JavaScript comparison", "programming language differences"]
+
 === INSTRUCTIONS ===
 1. READ the user's query carefully and understand their SPECIFIC question
 2. Generate searches that will find information to DIRECTLY ANSWER their question
@@ -138,6 +159,8 @@ User asks: "link?" (after discussing minecraft trailer)
 6. CRITICAL: DO NOT add years or dates to searches unless the user explicitly mentions them
 7. Keep searches general and timeless unless the user specifically asks about timing/dates
 8. Focus on the core concepts, not time-specific versions unless requested
+9. OPINION REQUESTS: If asking for opinions, thoughts, or "what do you think", ALWAYS search Reddit for opinions about that topic using "reddit [topic] opinions" format
+10. REDDIT OPINION SEARCHES: Use "reddit [subject] opinions", "reddit [subject] thoughts", "reddit [subject] discussion" for any opinion-based queries
 
 === RESPONSE FORMAT ===
 OUTPUT ONLY A JSON ARRAY OF SEARCH QUERIES: ["query1", "query2", "query3"]
@@ -454,8 +477,8 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
         if youtube_links:
             aggregated_raw_information += "\n\n=== EXTRACTED YOUTUBE LINKS - USE THESE EXACT LINKS ===\n" + "\n".join(youtube_links)
         
-        # Step 2: Gemini Flash formulates the answer using the raw data and Luna's consciousness matrix
-        answering_model = "google/gemini-2.5-flash"
+        # Step 2: Use current AI model to formulate the answer using the raw data and Luna's consciousness matrix
+        answering_model = CURRENT_AI_MODEL
         persona_system_prompt_for_gemini = (
             "=== YOUR IDENTITY ===\n"
             "- YOU ARE: Luna, a naturally brilliant and charismatic girl who's great at conversations\n"
@@ -662,7 +685,7 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
             f"- Let your intellectual depth show through content, not verbal style\n"
             f"- Vary your linguistic patterns to sound authentically human\n"
             f"- Balance technical precision with conversational rhythm\n\n"
-            f"CRITICAL REMINDER: Make every word count, no blabbering or filler. Responses should be concise but substantive:\n- Simple questions: 10-20 words max\n- Standard questions: 20-40 words max\n- Complex questions: 40-60 words max\n- Only for deeply technical matters: 60-80 words absolute maximum\nNever exceed word limits. Quality over quantity - every single word must earn its place. Say something meaningful, not just words to fill space.\n\n"
+            f"CRITICAL REMINDER: Make every word count, no blabbering or filler. Responses should be concise but substantive:\n- Simple questions: 10-20 words max\n- Standard questions: 20-40 words max\n- Complex questions: 40-60 words max\n- Only for deeply technical matters: 60-80 words absolute maximum\nNever exceed word limits. Quality over quantity - every single word must earn its place. Say something meaningful, not just words to fill space.\n\nFORBIDDEN GENERIC ENDINGS: NEVER end with summary statements like 'it's about X not Y', 'it's less about A and more about B', 'it's a complete unified experience', 'it's really about the overall approach', or any corporate-speak conclusions. End with actual facts, not meta-commentary about what the facts mean.\n\n"
             f"CRITICAL INSTRUCTION ABOUT LINKS AND URL HANDLING: When discussing products, services, or content that can be referenced online:\n"
             f"1. ONLY USE EXACT, UNMODIFIED URLs COPY-PASTED FROM THE SEARCH RESULTS ABOVE - NEVER MODIFY THEM\n"
             f"2. EXTRACT COMPLETE URLs EXACTLY AS THEY APPEAR in the search results - never abbreviate, truncate, reconstruct, or change URL structure in any way\n"
@@ -682,8 +705,8 @@ async def get_ai_response(query, use_realtime=None, previous_messages=None): # u
         print(f"Answering with {answering_model} using combined query for: '{query[:50]}...'" )
         final_answer = await _call_openrouter(answering_model, persona_system_prompt_for_gemini, combined_query_for_gemini, enable_web_search=False) # Web search already done
     else:
-        # Standard offline response using Gemini Flash with Luna's persona
-        answering_model = "google/gemini-2.5-flash"
+        # Standard offline response using current AI model with Luna's persona
+        answering_model = CURRENT_AI_MODEL
         persona_system_prompt_for_gemini = (
             "=== YOUR IDENTITY ===\n"
             "- YOU ARE: Luna, a naturally brilliant and charismatic girl who's great at conversations\n"

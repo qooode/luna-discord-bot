@@ -4,7 +4,7 @@ import re
 import asyncio
 from dotenv import load_dotenv
 from discord import app_commands
-from ai_handler import get_ai_response
+from ai_handler import get_ai_response, set_ai_model, get_current_ai_model
 from link_handler import handle_links
 from temp_channels import TempChannelManager
 
@@ -271,6 +271,46 @@ async def tempoff_command(interaction: discord.Interaction):
     
     client.temp_channel_manager.disable_temp_channels()
     await interaction.response.send_message("⛔ Temp channels have been **disabled**!", ephemeral=True)
+
+@client.tree.command(name="setmodel", description="Change Luna's AI model (Admin only)")
+@app_commands.describe(model="AI model to use (e.g., 'google/gemini-2.5-flash', 'anthropic/claude-3.5-sonnet')")
+async def setmodel_command(interaction: discord.Interaction, model: str):
+    # Check if user is admin
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Only administrators can use this command!", ephemeral=True)
+        return
+    
+    try:
+        # Get current model for comparison
+        current_model = get_current_ai_model()
+        
+        # Set the new model
+        new_model = set_ai_model(model)
+        
+        await interaction.response.send_message(
+            f"✅ **Luna's AI model changed!**\n"
+            f"**Previous:** `{current_model}`\n"
+            f"**Current:** `{new_model}`\n\n"
+            f"Luna will now use `{new_model}` for all responses.",
+            ephemeral=True
+        )
+        
+        print(f"Admin {interaction.user.name} changed Luna's AI model from {current_model} to {new_model}")
+        
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ **Error changing model:**\n```{str(e)}```\n\n"
+            f"Make sure you're using a valid OpenRouter model name.",
+            ephemeral=True
+        )
+
+@client.tree.command(name="getmodel", description="Check Luna's current AI model")
+async def getmodel_command(interaction: discord.Interaction):
+    current_model = get_current_ai_model()
+    await interaction.response.send_message(
+        f"🤖 **Luna's current AI model:**\n`{current_model}`",
+        ephemeral=True
+    )
 
 @client.tree.command(name="help", description="Show all available commands and features")
 async def help_command(interaction: discord.Interaction):
