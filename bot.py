@@ -313,6 +313,43 @@ async def getmodel_command(interaction: discord.Interaction):
         ephemeral=True
     )
 
+@client.tree.command(name="setglobalpersona", description="Set global persona for Luna (Admin only)")
+@app_commands.describe(persona="How should Luna behave? (e.g., 'Be more casual and use gaming terms')")
+async def setglobalpersona_command(interaction: discord.Interaction, persona: str):
+    # Check if user is admin
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Only administrators can use this command!", ephemeral=True)
+        return
+    
+    result = persona_handler.set_global_persona(persona)
+    await interaction.response.send_message(result, ephemeral=True)
+
+@client.tree.command(name="setmypersona", description="Set your personal Luna persona")
+@app_commands.describe(persona="How should Luna behave when talking to you? (e.g., 'Be more technical and direct')")
+async def setmypersona_command(interaction: discord.Interaction, persona: str):
+    result = persona_handler.set_user_persona(str(interaction.user.id), persona)
+    await interaction.response.send_message(result, ephemeral=True)
+
+@client.tree.command(name="removemypersona", description="Remove your personal Luna persona")
+async def removemypersona_command(interaction: discord.Interaction):
+    result = persona_handler.remove_user_persona(str(interaction.user.id))
+    await interaction.response.send_message(result, ephemeral=True)
+
+@client.tree.command(name="removeglobalpersona", description="Remove global persona (Admin only)")
+async def removeglobalpersona_command(interaction: discord.Interaction):
+    # Check if user is admin
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Only administrators can use this command!", ephemeral=True)
+        return
+    
+    result = persona_handler.remove_global_persona()
+    await interaction.response.send_message(result, ephemeral=True)
+
+@client.tree.command(name="personastatus", description="Check current persona settings")
+async def personastatus_command(interaction: discord.Interaction):
+    result = persona_handler.get_status(str(interaction.user.id))
+    await interaction.response.send_message(result, ephemeral=True)
+
 @client.tree.command(name="help", description="Show all available commands and features")
 async def help_command(interaction: discord.Interaction):
     embed = discord.Embed(
