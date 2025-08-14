@@ -4,7 +4,7 @@ import re
 import asyncio
 from dotenv import load_dotenv
 from discord import app_commands
-from ai_handler import get_ai_response, set_ai_model, get_current_ai_model
+from ai_handler import get_ai_response, set_ai_model, get_current_ai_model, set_internal_ai_model, get_current_internal_ai_model
 from link_handler import handle_links
 from temp_channels import TempChannelManager
 from persona_handler import persona_handler
@@ -313,6 +313,48 @@ async def getmodel_command(interaction: discord.Interaction):
         ephemeral=True
     )
 
+@client.tree.command(name="setinternalmodel", description="Change Luna's internal processing model (Admin only)")
+@app_commands.describe(model="Internal AI model for analysis and processing (e.g., 'google/gemini-2.5-flash', 'anthropic/claude-3.5-sonnet')")
+async def setinternalmodel_command(interaction: discord.Interaction, model: str):
+    # Check if user is admin
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Only administrators can use this command!", ephemeral=True)
+        return
+    
+    try:
+        # Get current internal model for comparison
+        current_internal_model = get_current_internal_ai_model()
+        
+        # Set the new internal model
+        new_internal_model = set_internal_ai_model(model)
+        
+        await interaction.response.send_message(
+            f"✅ **Luna's internal AI model changed!**\n"
+            f"**Previous:** `{current_internal_model}`\n"
+            f"**Current:** `{new_internal_model}`\n\n"
+            f"Luna will now use `{new_internal_model}` for internal processing (context analysis, search queries, etc.).\n"
+            f"This is separate from the output model used for responses.",
+            ephemeral=True
+        )
+        
+        print(f"Admin {interaction.user.name} changed Luna's internal AI model from {current_internal_model} to {new_internal_model}")
+        
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ **Error changing internal model:**\n```{str(e)}```\n\n"
+            f"Make sure you're using a valid OpenRouter model name.",
+            ephemeral=True
+        )
+
+@client.tree.command(name="getinternalmodel", description="Check Luna's current internal processing model")
+async def getinternalmodel_command(interaction: discord.Interaction):
+    current_internal_model = get_current_internal_ai_model()
+    await interaction.response.send_message(
+        f"🔧 **Luna's current internal processing model:**\n`{current_internal_model}`\n\n"
+        f"This model is used for context analysis, search queries, and other internal processing.",
+        ephemeral=True
+    )
+
 @client.tree.command(name="setglobalpersona", description="Set global persona for Luna (Admin only)")
 @app_commands.describe(persona="How should Luna behave? (e.g., 'Be more casual and use gaming terms')")
 async def setglobalpersona_command(interaction: discord.Interaction, persona: str):
@@ -588,7 +630,7 @@ async def get_newest_message_from_summary(channel, count):
 
 async def create_message_summary(messages, original_count, channel):
     """Create a human-tone summary of messages focusing on topics and key participants."""
-    from ai_handler import _call_openrouter
+    from ai_handler import _call_openrouter, get_current_internal_ai_model
     
     # Format messages for AI processing with IDs for linking
     message_text = ""
@@ -618,7 +660,7 @@ Create bullet points using exact message IDs. Format: • Name did something [ME
 CRITICAL: EXACTLY 8 bullets. 2-3 sentences per bullet. MAX 25 words per bullet."""
     
     summary = _call_openrouter(
-        "google/gemini-2.5-flash",
+        get_current_internal_ai_model(),
         system_prompt,
         user_prompt
     )
