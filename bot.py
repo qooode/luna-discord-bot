@@ -4,7 +4,15 @@ import re
 import asyncio
 from dotenv import load_dotenv
 from discord import app_commands
-from ai_handler import get_ai_response, set_ai_model, get_current_ai_model, set_internal_ai_model, get_current_internal_ai_model
+from ai_handler import (
+    get_ai_response,
+    set_ai_model,
+    get_current_ai_model,
+    set_internal_ai_model,
+    get_current_internal_ai_model,
+    generate_image,
+    decide_routing,
+)
 from link_handler import handle_links
 from temp_channels import TempChannelManager
 from persona_handler import persona_handler
@@ -526,6 +534,13 @@ async def help_command(interaction: discord.Interaction):
               "• **Smart filtering** - Prevents abuse and inappropriate content",
         inline=False
     )
+
+    # Image Generation
+    embed.add_field(
+        name="🖼️ Image Generation",
+        value="• `/image <prompt>` - Generate an image using Gemini",
+        inline=False
+    )
     
     # Premium Role Management (Admin only)
     embed.add_field(
@@ -552,6 +567,22 @@ async def help_command(interaction: discord.Interaction):
     embed.set_footer(text="💡 Tip: Luna works best when mentioned or replied to directly!")
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@client.tree.command(name="image", description="Generate an image from a prompt")
+@app_commands.describe(prompt="Describe the image you want to generate")
+async def image_command(interaction: discord.Interaction, prompt: str):
+    await interaction.response.defer(thinking=True)
+    try:
+        caption, url = await generate_image(prompt)
+        if url:
+            embed = discord.Embed(title="🖼️ Generated Image", description=caption)
+            embed.set_image(url=url)
+            await interaction.followup.send(embed=embed)
+        else:
+            # Fallback to text if no URL found
+            await interaction.followup.send(caption)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error generating image: {str(e)}", ephemeral=True)
 
 class SummaryView(discord.ui.View):
     def __init__(self, pages, message_count):
@@ -796,6 +827,26 @@ async def on_message(message):
     
     # Remove the mention from the content if it exists
     content = re.sub(f'<@!?{client.user.id}>', '', message.content).strip()
+
+    # Ask LLM to route this request (image vs chat)
+    routing = await decide_routing(content, context_messages=None)
+    if routing.get("action") == "image":
+        try:
+            await message.channel.trigger_typing()
+        except Exception:
+            pass
+        try:
+            img_prompt = routing.get("prompt", content)
+            caption, url = await generate_image(img_prompt)
+            if url:
+                embed = discord.Embed(title="🖼️ Generated Image", description=caption)
+                embed.set_image(url=url)
+                await message.reply(embed=embed)
+            else:
+                await message.reply(caption)
+        except Exception as e:
+            await message.reply(f"❌ Error generating image: {str(e)}")
+        return
     
     # If the message is empty after removing the mention, don't respond
     if not content:

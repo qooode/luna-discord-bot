@@ -41,6 +41,182 @@ def get_current_internal_ai_model():
     """Get the currently set internal AI model"""
     return CURRENT_INTERNAL_AI_MODEL
 
+async def decide_routing(user_text: str, context_messages: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """Ask an LLM to decide whether this is an image generation request or regular chat.
+
+    Returns a dict like: {"action":"image"|"chat", "prompt":"..."}
+    Only returns JSON; falls back to chat on parse errors.
+    """
+    model_name = CURRENT_INTERNAL_AI_MODEL
+
+    # Prepare condensed context (optional, short to control token usage)
+    context_snippets = []
+    if context_messages:
+        for msg in context_messages[-6:]:  # last few messages
+            author = msg.get('author_name', 'user')
+            content = (msg.get('content') or '')
+            # Strip our own prefixes like [name]: if present
+            try:
+                content = re.sub(r"^\[[^\]]+\]:\s*", "", content).strip()
+            except Exception:
+                pass
+            if content:
+                context_snippets.append(f"{author}: {content[:120]}")
+    context_block = "\n".join(context_snippets) if context_snippets else ""
+
+    system_prompt = (
+        "You decide routing for a Discord bot.\n"
+        "Your job: detect if the user is ASKING TO GENERATE AN IMAGE.\n"
+        "If yes, extract a clean, concrete image prompt.\n"
+        "If not, route to normal chat.\n\n"
+        "Rules:\n"
+        "- Treat casual language as intent: e.g., 'make me a logo', 'draw a cat astronaut', 'image: neon city at night'\n"
+        "- Only choose image when the user wants a new image created.\n"
+        "- Do NOT choose image for analyzing an existing image link; choose chat instead.\n"
+        "- Keep the prompt descriptive but concise; avoid quoting prior usernames.\n"
+        "- Return STRICT JSON ONLY, no code fences.\n\n"
+        "Output schema: {\"action\": \"image|chat\", \"prompt\": \"...\"}"
+    )
+
+    user_payload = {
+        "current_message": user_text,
+        "recent_context": context_block,
+        "examples": [
+            {"in": "@Luna generate an image of a retro robot chef", "out": {"action": "image", "prompt": "retro robot chef cooking in a 1950s diner, vibrant colors, cinematic lighting"}},
+            {"in": "can you draw a cozy cabin in the snow at dusk?", "out": {"action": "image", "prompt": "cozy wooden cabin in snowy forest at dusk, warm lights, soft snowfall, cinematic"}},
+            {"in": "what do you think about the new iPhone?", "out": {"action": "chat", "prompt": "what do you think about the new iPhone?"}},
+            {"in": "what is in this image? https://example.com/photo.jpg", "out": {"action": "chat", "prompt": "what is in this image? https://example.com/photo.jpg"}}
+        ]
+    }
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=60)
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": os.getenv('YOUR_APP_URL', 'https://selene-bot.app'),
+            "X-Title": os.getenv('YOUR_APP_NAME', 'Luna Discord Bot')
+        }
+        payload = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(user_payload)}
+            ]
+        }
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+        raw = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        # Some models return code fences
+        if isinstance(raw, str):
+            if '```' in raw:
+                m = re.search(r"```(?:json)?\n(.*?)\n```", raw, re.DOTALL)
+                if m:
+                    raw = m.group(1)
+            try:
+                parsed = json.loads(raw)
+                action = parsed.get("action", "chat")
+                prompt = parsed.get("prompt", user_text)
+                if action not in ("image", "chat"):
+                    action = "chat"
+                return {"action": action, "prompt": prompt}
+            except Exception:
+                pass
+        # Fallback
+        return {"action": "chat", "prompt": user_text}
+    except Exception as e:
+        print(f"decide_routing error: {e}")
+        return {"action": "chat", "prompt": user_text}
+
+async def generate_image(prompt: str) -> Tuple[str, Optional[str]]:
+    """Generate an image using OpenRouter's Gemini image preview model.
+
+    Returns a tuple of (caption_text, image_url). image_url may be None if
+    the provider returns only text.
+    """
+    if not OPENROUTER_API_KEY:
+        return ("OpenRouter API key is not configured.", None)
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": os.getenv('YOUR_APP_URL', 'https://selene-bot.app'),
+        "X-Title": os.getenv('YOUR_APP_NAME', 'Luna Discord Bot')
+    }
+
+    payload: Dict[str, Any] = {
+        "model": "google/gemini-2.5-flash-image-preview",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt}
+                ]
+            }
+        ]
+    }
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=180)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+            ) as response:
+                response.raise_for_status()
+                data = await response.json()
+
+        # Attempt to extract an image url and any caption text
+        image_url: Optional[str] = None
+        caption_text: str = ""
+
+        try:
+            choice = data.get("choices", [{}])[0]
+            message = choice.get("message", {})
+            content = message.get("content")
+
+            # Some providers return a list of content parts
+            if isinstance(content, list):
+                for part in content:
+                    ptype = part.get("type")
+                    if ptype in ("image_url", "image"):
+                        # Typical structure: { type: 'image_url', image_url: { url: '...' } }
+                        url = None
+                        if isinstance(part.get("image_url"), dict):
+                            url = part["image_url"].get("url")
+                        if not url:
+                            url = part.get("url")
+                        if url and not image_url:
+                            image_url = url
+                    elif ptype in ("text", "output_text"):
+                        txt = part.get("text") or ""
+                        caption_text += (("\n" if caption_text else "") + txt.strip())
+            # Many models still return a plain string
+            elif isinstance(content, str):
+                caption_text = content.strip()
+                # Heuristic: find first URL in the text
+                import re
+                m = re.search(r"https?://\S+", caption_text)
+                if m:
+                    image_url = m.group(0)
+        except Exception as parse_err:
+            print(f"Error parsing image response: {parse_err}")
+
+        if not caption_text:
+            caption_text = "Here is your generated image."
+
+        return (caption_text, image_url)
+
+    except asyncio.TimeoutError:
+        return ("The image generation request timed out. Please try a simpler or shorter prompt.", None)
+    except aiohttp.ClientError as e:
+        return (f"Network error while generating image: {str(e)[:120]}", None)
+    except Exception as e:
+        return (f"Unexpected error during image generation: {str(e)[:200]}", None)
+
 async def _call_openrouter(model_name, system_prompt, user_query, enable_web_search=False):
     """Helper function to make calls to OpenRouter."""
     headers = {

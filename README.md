@@ -11,6 +11,7 @@ Luna is an intelligent Discord bot that combines AI conversation capabilities wi
 - **General Knowledge**: Uses Gemini for questions that don't require real-time data
 - **Context Awareness**: Remembers recent conversation history for better responses
 - **Link Processing**: Automatically handles Twitter/X links
+ - **Image Generation**: Ask naturally (e.g., "@Luna generate an image of a cat astronaut") or use `/image`
 
 ### Channel Management  
 - **Enable/Disable Controls**: Use `/luna` commands to control where Luna responds
@@ -61,6 +62,7 @@ Luna is an intelligent Discord bot that combines AI conversation capabilities wi
 - `/kick <user>` - Remove someone from your private temp channel  
 - `/tempclose` - Close your temp channel
 - `/templist` - List your active temp channels
+ - `/image <prompt>` - Generate an image using Gemini via OpenRouter
 
 ### Admin Commands
 - `/tempon` - Enable temporary channels feature
