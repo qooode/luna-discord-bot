@@ -161,20 +161,51 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
     try:
         timeout = aiohttp.ClientTimeout(total=60)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json=payload,
-            ) as response:
-                if response.status >= 400:
-                    try:
-                        err_text = await response.text()
-                    except Exception:
-                        err_text = ""
-                    msg = f"Provider returned {response.status}: {err_text[:400]}"
-                    print(msg)
-                    return {"caption": msg, "image_url": None, "image_b64": None}
-                data = await response.json()
+            # First attempt: use the responses endpoint which supports image outputs explicitly
+            try:
+                responses_payload = {
+                    "model": "google/gemini-2.5-flash-image-preview",
+                    "input": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": prompt}
+                            ]
+                        }
+                    ]
+                }
+                async with session.post(
+                    "https://openrouter.ai/api/v1/responses",
+                    headers=headers,
+                    json=responses_payload,
+                ) as resp1:
+                    if resp1.status < 400:
+                        data = await resp1.json()
+                    else:
+                        # Fallback to chat/completions if responses is not available for this model
+                        raise aiohttp.ClientResponseError(
+                            request_info=resp1.request_info,
+                            history=resp1.history,
+                            status=resp1.status,
+                            message=await resp1.text(),
+                            headers=resp1.headers,
+                        )
+            except Exception as e1:
+                # Fallback path: chat/completions with text-only content
+                async with session.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                ) as response:
+                    if response.status >= 400:
+                        try:
+                            err_text = await response.text()
+                        except Exception:
+                            err_text = ""
+                        msg = f"Provider returned {response.status}: {err_text[:400]}"
+                        print(msg)
+                        return {"caption": msg, "image_url": None, "image_b64": None}
+                    data = await response.json()
 
         # Attempt to extract an image url and any caption text
         image_url: Optional[str] = None
@@ -182,9 +213,19 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
         caption_text: str = ""
 
         try:
-            choice = data.get("choices", [{}])[0]
-            message = choice.get("message", {})
-            content = message.get("content")
+            # Attempt to normalize output across both endpoints
+            content = None
+            if isinstance(data, dict):
+                # responses endpoint may return 'output' or 'content' or 'choices[*].message.content'
+                if "choices" in data:
+                    choice = data.get("choices", [{}])[0]
+                    message = choice.get("message", {}) or {}
+                    content = message.get("content")
+                    if not content and isinstance(choice, dict):
+                        # Some providers nest 'content' directly
+                        content = choice.get("content")
+                if not content:
+                    content = data.get("output") or data.get("content")
 
             # Some providers return a list of content parts
             if isinstance(content, list):
