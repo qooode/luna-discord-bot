@@ -150,15 +150,13 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
         "messages": [
             {
                 "role": "user",
-                # Send as structured content for better multimodal routing
+                # Structured content: text input + request an image output with size
                 "content": [
-                    {"type": "input_text", "text": prompt},
-                    {"type": "output_image"}
+                    {"type": "text", "text": prompt},
+                    {"type": "output_image", "size": "1024x1024"}
                 ]
             }
-        ],
-        # Some image-capable providers accept optional size
-        "extra_body": {"image": {"size": "1024x1024"}}
+        ]
     }
 
     try:
