@@ -568,38 +568,72 @@ async def help_command(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
+async def _send_image_attachment(target, caption: str, image_url: str | None, image_b64: str | None):
+    """Send an image to Discord as an attachment when possible.
+    - target: either an Interaction (followup) or a Channel/Message for reply/send.
+    - Picks filename extension based on content-type or defaults to png.
+    - Falls back to embed with URL if download fails.
+    """
+    try:
+        if image_b64:
+            import base64, io
+            data = base64.b64decode(image_b64)
+            file = discord.File(io.BytesIO(data), filename="image.png")
+            if isinstance(target, discord.Interaction):
+                await target.followup.send(content=caption, file=file)
+            else:
+                await target.send(content=caption, file=file)
+            return
+        if image_url:
+            # Try to fetch and attach; some CDNs don’t embed reliably
+            try:
+                import aiohttp, io
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(image_url, headers={"User-Agent": "LunaBot/1.0"}) as resp:
+                        resp.raise_for_status()
+                        content_type = resp.headers.get("Content-Type", "image/png").lower()
+                        data = await resp.read()
+                ext = ".png"
+                if "jpeg" in content_type or "jpg" in content_type:
+                    ext = ".jpg"
+                elif "webp" in content_type:
+                    ext = ".webp"
+                elif "gif" in content_type:
+                    ext = ".gif"
+                file = discord.File(io.BytesIO(data), filename=f"image{ext}")
+                if isinstance(target, discord.Interaction):
+                    await target.followup.send(content=caption, file=file)
+                else:
+                    await target.send(content=caption, file=file)
+                return
+            except Exception:
+                # Fallback to embedding the URL
+                embed = discord.Embed(title="🖼️ Generated Image", description=caption)
+                embed.set_image(url=image_url)
+                if isinstance(target, discord.Interaction):
+                    await target.followup.send(embed=embed)
+                else:
+                    await target.send(embed=embed)
+                return
+        # Last resort: caption only
+        if isinstance(target, discord.Interaction):
+            await target.followup.send(caption or "(no image returned)")
+        else:
+            await target.send(caption or "(no image returned)")
+    except Exception as e:
+        # Ensure we always respond to avoid indefinite spinners
+        if isinstance(target, discord.Interaction):
+            await target.followup.send(f"❌ Error sending image: {str(e)}")
+        else:
+            await target.send(f"❌ Error sending image: {str(e)}")
+
 @client.tree.command(name="image", description="Generate an image from a prompt")
 @app_commands.describe(prompt="Describe the image you want to generate")
 async def image_command(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer(thinking=True)
     try:
         result = await generate_image(prompt)
-        caption = result.get("caption") or ""
-        url = result.get("image_url")
-        b64 = result.get("image_b64")
-        # Prefer sending the file to ensure Discord renders it
-        if b64:
-            import base64, io
-            data = base64.b64decode(b64)
-            file = discord.File(io.BytesIO(data), filename="image.png")
-            await interaction.followup.send(content=caption, file=file)
-        elif url:
-            # Try to fetch and attach; fall back to embed if fetch fails
-            try:
-                import aiohttp
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url) as resp:
-                        resp.raise_for_status()
-                        data = await resp.read()
-                import io
-                file = discord.File(io.BytesIO(data), filename="image.png")
-                await interaction.followup.send(content=caption, file=file)
-            except Exception:
-                embed = discord.Embed(title="🖼️ Generated Image", description=caption)
-                embed.set_image(url=url)
-                await interaction.followup.send(embed=embed)
-        else:
-            await interaction.followup.send(caption)
+        await _send_image_attachment(interaction, result.get("caption") or "", result.get("image_url"), result.get("image_b64"))
     except Exception as e:
         await interaction.followup.send(f"❌ Error generating image: {str(e)}", ephemeral=True)
 
@@ -857,31 +891,8 @@ async def on_message(message):
         try:
             img_prompt = routing.get("prompt", content)
             result = await generate_image(img_prompt)
-            caption = result.get("caption") or ""
-            url = result.get("image_url")
-            b64 = result.get("image_b64")
-            if b64:
-                import base64, io
-                data = base64.b64decode(b64)
-                file = discord.File(io.BytesIO(data), filename="image.png")
-                await message.reply(content=caption, file=file)
-            elif url:
-                # Try to fetch and attach; fall back to embed
-                try:
-                    import aiohttp
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(url) as resp:
-                            resp.raise_for_status()
-                            data = await resp.read()
-                    import io
-                    file = discord.File(io.BytesIO(data), filename="image.png")
-                    await message.reply(content=caption, file=file)
-                except Exception:
-                    embed = discord.Embed(title="🖼️ Generated Image", description=caption)
-                    embed.set_image(url=url)
-                    await message.reply(embed=embed)
-            else:
-                await message.reply(caption)
+            # Use channel.send to avoid threading issues with reply if message deleted
+            await _send_image_attachment(message.channel, result.get("caption") or "", result.get("image_url"), result.get("image_b64"))
         except Exception as e:
             await message.reply(f"❌ Error generating image: {str(e)}")
         return
