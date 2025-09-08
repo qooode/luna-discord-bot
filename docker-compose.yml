@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  luna-bot:
+    build: .
+    container_name: luna-discord-bot
+    working_dir: /app
+    # Mount the repo so personas/temp_channels JSON persist and you can iterate easily
+    volumes:
+      - ./:/app
+    environment:
+      # Use .env or override at runtime; defaults help local testing
+      DISCORD_TOKEN: ${DISCORD_TOKEN:-your_discord_bot_token}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-your_openrouter_api_key}
+    restart: unless-stopped
+    command: ["python", "-u", "bot.py"]
