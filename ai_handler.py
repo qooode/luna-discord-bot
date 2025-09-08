@@ -168,61 +168,31 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
                     {"type": "text", "text": prompt}
                 ]
             }
-        ]
+        ],
+        # Help provider allocate enough budget for an image
+        "max_tokens": 1290,
+        # Avoid stream semantics for simpler handling
+        "stream": False
     }
 
     try:
         timeout = aiohttp.ClientTimeout(total=60)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            # First attempt: use the responses endpoint which supports image outputs explicitly
-            try:
-                responses_payload = {
-                    "model": "google/gemini-2.5-flash-image-preview",
-                    "input": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "input_text", "text": prompt}
-                            ]
-                        }
-                    ]
-                }
-                logger.info("[generate_image] POST /responses model=%s", responses_payload.get("model"))
-                logger.debug("[generate_image] request payload: %s", json.dumps(responses_payload)[:2000])
-                async with session.post(
-                    "https://openrouter.ai/api/v1/responses",
-                    headers=headers,
-                    json=responses_payload,
-                ) as resp1:
-                    raw_text = await resp1.text()
-                    logger.debug("[generate_image] /responses status=%s raw=%s", resp1.status, raw_text[:4000])
-                    if resp1.status < 400:
-                        data = json.loads(raw_text)
-                    else:
-                        # Fallback to chat/completions if responses is not available for this model
-                        raise aiohttp.ClientResponseError(
-                            request_info=resp1.request_info,
-                            history=resp1.history,
-                            status=resp1.status,
-                            message=raw_text,
-                            headers=resp1.headers,
-                        )
-            except Exception as e1:
-                # Fallback path: chat/completions with text-only content
-                logger.info("[generate_image] Falling back to /chat/completions due to: %s", str(e1)[:200])
-                logger.debug("[generate_image] request payload: %s", json.dumps(payload)[:2000])
-                async with session.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers=headers,
-                    json=payload,
-                ) as response:
-                    raw_text = await response.text()
-                    logger.debug("[generate_image] /chat status=%s raw=%s", response.status, raw_text[:4000])
-                    if response.status >= 400:
-                        msg = f"Provider returned {response.status}: {raw_text[:400]}"
-                        logger.warning("[generate_image] %s", msg)
-                        return {"caption": msg, "image_url": None, "image_b64": None}
-                    data = json.loads(raw_text)
+            # Call OpenRouter chat/completions directly (responses served HTML for your account)
+            logger.info("[generate_image] POST /chat model=%s", payload.get("model"))
+            logger.debug("[generate_image] request payload: %s", json.dumps(payload)[:2000])
+            async with session.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+            ) as response:
+                raw_text = await response.text()
+                logger.debug("[generate_image] /chat status=%s raw=%s", response.status, raw_text[:4000])
+                if response.status >= 400:
+                    msg = f"Provider returned {response.status}: {raw_text[:400]}"
+                    logger.warning("[generate_image] %s", msg)
+                    return {"caption": msg, "image_url": None, "image_b64": None}
+                data = json.loads(raw_text)
 
         # Attempt to extract an image url and any caption text
         image_url: Optional[str] = None
