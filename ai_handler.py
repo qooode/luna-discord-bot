@@ -5,6 +5,7 @@ import aiohttp
 import asyncio
 import datetime
 import re  # Added for regex pattern matching
+import logging
 from typing import List, Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
 from persona_handler import persona_handler
@@ -14,6 +15,14 @@ load_dotenv()
 
 # Get OpenRouter API key from environment variables
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+
+# Logging setup (controlled via LUNA_LOG_LEVEL)
+_LOG_LEVEL = os.getenv('LUNA_LOG_LEVEL', 'INFO').upper()
+try:
+    logging.basicConfig(level=getattr(logging, _LOG_LEVEL, logging.INFO))
+except Exception:
+    logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("luna.ai")
 
 # Global variable to store the current AI model
 CURRENT_AI_MODEL = "google/gemini-2.5-flash"
@@ -104,10 +113,13 @@ async def decide_routing(user_text: str, context_messages: Optional[List[Dict[st
                 {"role": "user", "content": json.dumps(user_payload)}
             ]
         }
+        logger.debug("[decide_routing] request payload: %s", json.dumps(payload)[:2000])
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload) as resp:
+                raw_text = await resp.text()
+                logger.debug("[decide_routing] status=%s raw=%s", resp.status, raw_text[:4000])
                 resp.raise_for_status()
-                data = await resp.json()
+                data = json.loads(raw_text)
         raw = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         # Some models return code fences
         if isinstance(raw, str):
@@ -127,7 +139,7 @@ async def decide_routing(user_text: str, context_messages: Optional[List[Dict[st
         # Fallback
         return {"action": "chat", "prompt": user_text}
     except Exception as e:
-        print(f"decide_routing error: {e}")
+        logger.exception("[decide_routing] error")
         return {"action": "chat", "prompt": user_text}
 
 async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
@@ -174,38 +186,42 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
                         }
                     ]
                 }
+                logger.info("[generate_image] POST /responses model=%s", responses_payload.get("model"))
+                logger.debug("[generate_image] request payload: %s", json.dumps(responses_payload)[:2000])
                 async with session.post(
                     "https://openrouter.ai/api/v1/responses",
                     headers=headers,
                     json=responses_payload,
                 ) as resp1:
+                    raw_text = await resp1.text()
+                    logger.debug("[generate_image] /responses status=%s raw=%s", resp1.status, raw_text[:4000])
                     if resp1.status < 400:
-                        data = await resp1.json()
+                        data = json.loads(raw_text)
                     else:
                         # Fallback to chat/completions if responses is not available for this model
                         raise aiohttp.ClientResponseError(
                             request_info=resp1.request_info,
                             history=resp1.history,
                             status=resp1.status,
-                            message=await resp1.text(),
+                            message=raw_text,
                             headers=resp1.headers,
                         )
             except Exception as e1:
                 # Fallback path: chat/completions with text-only content
+                logger.info("[generate_image] Falling back to /chat/completions due to: %s", str(e1)[:200])
+                logger.debug("[generate_image] request payload: %s", json.dumps(payload)[:2000])
                 async with session.post(
                     "https://openrouter.ai/api/v1/chat/completions",
                     headers=headers,
                     json=payload,
                 ) as response:
+                    raw_text = await response.text()
+                    logger.debug("[generate_image] /chat status=%s raw=%s", response.status, raw_text[:4000])
                     if response.status >= 400:
-                        try:
-                            err_text = await response.text()
-                        except Exception:
-                            err_text = ""
-                        msg = f"Provider returned {response.status}: {err_text[:400]}"
-                        print(msg)
+                        msg = f"Provider returned {response.status}: {raw_text[:400]}"
+                        logger.warning("[generate_image] %s", msg)
                         return {"caption": msg, "image_url": None, "image_b64": None}
-                    data = await response.json()
+                    data = json.loads(raw_text)
 
         # Attempt to extract an image url and any caption text
         image_url: Optional[str] = None
@@ -227,6 +243,7 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
                 if not content:
                     content = data.get("output") or data.get("content")
 
+            logger.debug("[generate_image] parsed top-level keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
             # Some providers return a list of content parts
             if isinstance(content, list):
                 for part in content:
@@ -262,16 +279,20 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
         except Exception as parse_err:
             print(f"Error parsing image response: {parse_err}")
 
+        logger.info("[generate_image] extracted image_url=%s b64_len=%s", image_url, (len(image_b64) if image_b64 else 0))
         if not caption_text:
             caption_text = "Here is your generated image."
 
         return {"caption": caption_text, "image_url": image_url, "image_b64": image_b64}
 
     except asyncio.TimeoutError:
+        logger.warning("[generate_image] Timeout after 60s for prompt: %s", prompt[:120])
         return {"caption": "The image generation request timed out. Please try a simpler or shorter prompt.", "image_url": None, "image_b64": None}
     except aiohttp.ClientError as e:
+        logger.error("[generate_image] ClientError: %s", str(e))
         return {"caption": f"Network error while generating image: {str(e)[:120]}", "image_url": None, "image_b64": None}
     except Exception as e:
+        logger.exception("[generate_image] Unexpected error")
         return {"caption": f"Unexpected error during image generation: {str(e)[:200]}", "image_url": None, "image_b64": None}
 
 async def _call_openrouter(model_name, system_prompt, user_query, enable_web_search=False):
