@@ -220,6 +220,7 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
             # Parse message.images array if provided (OpenRouter variant)
             if isinstance(message_obj, dict) and not image_url and not image_b64:
                 imgs = message_obj.get("images") or []
+                logger.debug("[generate_image] message.images length=%s", len(imgs) if isinstance(imgs, list) else 0)
                 if isinstance(imgs, list):
                     for im in imgs:
                         try:
@@ -279,6 +280,28 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
                 m2 = re.search(r"data:image/(?:png|jpeg);base64,([A-Za-z0-9+/=]+)", caption_text)
                 if m2:
                     image_b64 = m2.group(1)
+
+            # Ultimate fallback: recursively search for any data:image base64 string anywhere
+            if (not image_url and not image_b64) and isinstance(data, (dict, list)):
+                def _find_data_url(obj):
+                    if isinstance(obj, dict):
+                        for v in obj.values():
+                            res = _find_data_url(v)
+                            if res:
+                                return res
+                    elif isinstance(obj, list):
+                        for v in obj:
+                            res = _find_data_url(v)
+                            if res:
+                                return res
+                    elif isinstance(obj, str) and obj.startswith("data:image/"):
+                        m = re.match(r"data:image/(?:png|jpeg|webp|gif);base64,(.+)", obj)
+                        if m:
+                            return (None, m.group(1))
+                    return None
+                found = _find_data_url(data)
+                if found:
+                    _, image_b64 = found
         except Exception as parse_err:
             print(f"Error parsing image response: {parse_err}")
 

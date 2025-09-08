@@ -583,11 +583,12 @@ async def _send_image_attachment(target, caption: str, image_url: str | None, im
                 tmp.write(data)
                 tmp_path = tmp.name
             try:
-                file = discord.File(tmp_path, filename=os.path.basename(tmp_path))
-                if isinstance(target, discord.Interaction):
-                    await target.followup.send(content=caption, file=file)
-                else:
-                    await target.send(content=caption, file=file)
+                with open(tmp_path, "rb") as fp:
+                    file = discord.File(fp, filename=os.path.basename(tmp_path))
+                    if isinstance(target, discord.Interaction):
+                        await target.followup.send(content=caption, file=file)
+                    else:
+                        await target.send(content=caption, file=file)
             finally:
                 try:
                     os.remove(tmp_path)
@@ -614,11 +615,12 @@ async def _send_image_attachment(target, caption: str, image_url: str | None, im
                     tmp.write(data)
                     tmp_path = tmp.name
                 try:
-                    file = discord.File(tmp_path, filename=os.path.basename(tmp_path))
-                    if isinstance(target, discord.Interaction):
-                        await target.followup.send(content=caption, file=file)
-                    else:
-                        await target.send(content=caption, file=file)
+                    with open(tmp_path, "rb") as fp:
+                        file = discord.File(fp, filename=os.path.basename(tmp_path))
+                        if isinstance(target, discord.Interaction):
+                            await target.followup.send(content=caption, file=file)
+                        else:
+                            await target.send(content=caption, file=file)
                 finally:
                     try:
                         os.remove(tmp_path)
