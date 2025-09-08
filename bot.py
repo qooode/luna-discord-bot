@@ -575,19 +575,29 @@ async def _send_image_attachment(target, caption: str, image_url: str | None, im
     - Falls back to embed with URL if download fails.
     """
     try:
+        import os, tempfile, base64, io
+        # Prefer writing to a temp file so Discord receives a path-backed file
         if image_b64:
-            import base64, io
             data = base64.b64decode(image_b64)
-            file = discord.File(io.BytesIO(data), filename="image.png")
-            if isinstance(target, discord.Interaction):
-                await target.followup.send(content=caption, file=file)
-            else:
-                await target.send(content=caption, file=file)
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                tmp.write(data)
+                tmp_path = tmp.name
+            try:
+                file = discord.File(tmp_path, filename=os.path.basename(tmp_path))
+                if isinstance(target, discord.Interaction):
+                    await target.followup.send(content=caption, file=file)
+                else:
+                    await target.send(content=caption, file=file)
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
             return
         if image_url:
-            # Try to fetch and attach; some CDNs don’t embed reliably
+            # Try to fetch to disk and attach
             try:
-                import aiohttp, io
+                import aiohttp
                 async with aiohttp.ClientSession() as session:
                     async with session.get(image_url, headers={"User-Agent": "LunaBot/1.0"}) as resp:
                         resp.raise_for_status()
@@ -600,11 +610,20 @@ async def _send_image_attachment(target, caption: str, image_url: str | None, im
                     ext = ".webp"
                 elif "gif" in content_type:
                     ext = ".gif"
-                file = discord.File(io.BytesIO(data), filename=f"image{ext}")
-                if isinstance(target, discord.Interaction):
-                    await target.followup.send(content=caption, file=file)
-                else:
-                    await target.send(content=caption, file=file)
+                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                    tmp.write(data)
+                    tmp_path = tmp.name
+                try:
+                    file = discord.File(tmp_path, filename=os.path.basename(tmp_path))
+                    if isinstance(target, discord.Interaction):
+                        await target.followup.send(content=caption, file=file)
+                    else:
+                        await target.send(content=caption, file=file)
+                finally:
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
                 return
             except Exception:
                 # Fallback to embedding the URL
