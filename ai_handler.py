@@ -150,10 +150,9 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
         "messages": [
             {
                 "role": "user",
-                # Structured content: text input + request an image output with size
+                # For generation, send text prompt. The model will return an image part if supported.
                 "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "output_image", "size": "1024x1024"}
+                    {"type": "text", "text": prompt}
                 ]
             }
         ]
@@ -167,7 +166,14 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
                 headers=headers,
                 json=payload,
             ) as response:
-                response.raise_for_status()
+                if response.status >= 400:
+                    try:
+                        err_text = await response.text()
+                    except Exception:
+                        err_text = ""
+                    msg = f"Provider returned {response.status}: {err_text[:400]}"
+                    print(msg)
+                    return {"caption": msg, "image_url": None, "image_b64": None}
                 data = await response.json()
 
         # Attempt to extract an image url and any caption text
