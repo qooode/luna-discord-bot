@@ -153,7 +153,7 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
                 # Send as structured content for better multimodal routing
                 "content": [
                     {"type": "input_text", "text": prompt},
-                    {"type": "text", "text": prompt}
+                    {"type": "output_image"}
                 ]
             }
         ],
@@ -162,7 +162,7 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
     }
 
     try:
-        timeout = aiohttp.ClientTimeout(total=180)
+        timeout = aiohttp.ClientTimeout(total=60)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
                 "https://openrouter.ai/api/v1/chat/completions",
