@@ -130,14 +130,13 @@ async def decide_routing(user_text: str, context_messages: Optional[List[Dict[st
         print(f"decide_routing error: {e}")
         return {"action": "chat", "prompt": user_text}
 
-async def generate_image(prompt: str) -> Tuple[str, Optional[str]]:
+async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
     """Generate an image using OpenRouter's Gemini image preview model.
 
-    Returns a tuple of (caption_text, image_url). image_url may be None if
-    the provider returns only text.
+    Returns a dict: {"caption": str, "image_url": Optional[str], "image_b64": Optional[str]}.
     """
     if not OPENROUTER_API_KEY:
-        return ("OpenRouter API key is not configured.", None)
+        return {"caption": "OpenRouter API key is not configured.", "image_url": None, "image_b64": None}
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -151,11 +150,15 @@ async def generate_image(prompt: str) -> Tuple[str, Optional[str]]:
         "messages": [
             {
                 "role": "user",
+                # Send as structured content for better multimodal routing
                 "content": [
+                    {"type": "input_text", "text": prompt},
                     {"type": "text", "text": prompt}
                 ]
             }
-        ]
+        ],
+        # Some image-capable providers accept optional size
+        "extra_body": {"image": {"size": "1024x1024"}}
     }
 
     try:
@@ -171,6 +174,7 @@ async def generate_image(prompt: str) -> Tuple[str, Optional[str]]:
 
         # Attempt to extract an image url and any caption text
         image_url: Optional[str] = None
+        image_b64: Optional[str] = None
         caption_text: str = ""
 
         try:
@@ -182,7 +186,7 @@ async def generate_image(prompt: str) -> Tuple[str, Optional[str]]:
             if isinstance(content, list):
                 for part in content:
                     ptype = part.get("type")
-                    if ptype in ("image_url", "image"):
+                    if ptype in ("image_url", "image", "output_image"):
                         # Typical structure: { type: 'image_url', image_url: { url: '...' } }
                         url = None
                         if isinstance(part.get("image_url"), dict):
@@ -191,6 +195,10 @@ async def generate_image(prompt: str) -> Tuple[str, Optional[str]]:
                             url = part.get("url")
                         if url and not image_url:
                             image_url = url
+                        # Some providers return base64
+                        b64 = part.get("image_base64") or part.get("b64_json")
+                        if b64 and not image_b64:
+                            image_b64 = b64
                     elif ptype in ("text", "output_text"):
                         txt = part.get("text") or ""
                         caption_text += (("\n" if caption_text else "") + txt.strip())
@@ -202,20 +210,24 @@ async def generate_image(prompt: str) -> Tuple[str, Optional[str]]:
                 m = re.search(r"https?://\S+", caption_text)
                 if m:
                     image_url = m.group(0)
+                # Or embedded data URL
+                m2 = re.search(r"data:image/(?:png|jpeg);base64,([A-Za-z0-9+/=]+)", caption_text)
+                if m2:
+                    image_b64 = m2.group(1)
         except Exception as parse_err:
             print(f"Error parsing image response: {parse_err}")
 
         if not caption_text:
             caption_text = "Here is your generated image."
 
-        return (caption_text, image_url)
+        return {"caption": caption_text, "image_url": image_url, "image_b64": image_b64}
 
     except asyncio.TimeoutError:
-        return ("The image generation request timed out. Please try a simpler or shorter prompt.", None)
+        return {"caption": "The image generation request timed out. Please try a simpler or shorter prompt.", "image_url": None, "image_b64": None}
     except aiohttp.ClientError as e:
-        return (f"Network error while generating image: {str(e)[:120]}", None)
+        return {"caption": f"Network error while generating image: {str(e)[:120]}", "image_url": None, "image_b64": None}
     except Exception as e:
-        return (f"Unexpected error during image generation: {str(e)[:200]}", None)
+        return {"caption": f"Unexpected error during image generation: {str(e)[:200]}", "image_url": None, "image_b64": None}
 
 async def _call_openrouter(model_name, system_prompt, user_query, enable_web_search=False):
     """Helper function to make calls to OpenRouter."""
