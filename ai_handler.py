@@ -153,6 +153,7 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
+        "Accept": "application/json",
         "HTTP-Referer": os.getenv('YOUR_APP_URL', 'https://selene-bot.app'),
         "X-Title": os.getenv('YOUR_APP_NAME', 'Luna Discord Bot')
     }
@@ -231,12 +232,13 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
         try:
             # Attempt to normalize output across both endpoints
             content = None
+            message_obj = None
             if isinstance(data, dict):
                 # responses endpoint may return 'output' or 'content' or 'choices[*].message.content'
                 if "choices" in data:
                     choice = data.get("choices", [{}])[0]
-                    message = choice.get("message", {}) or {}
-                    content = message.get("content")
+                    message_obj = choice.get("message", {}) or {}
+                    content = message_obj.get("content")
                     if not content and isinstance(choice, dict):
                         # Some providers nest 'content' directly
                         content = choice.get("content")
@@ -244,8 +246,34 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
                     content = data.get("output") or data.get("content")
 
             logger.debug("[generate_image] parsed top-level keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
+
+            # Parse message.images array if provided (OpenRouter variant)
+            if isinstance(message_obj, dict) and not image_url and not image_b64:
+                imgs = message_obj.get("images") or []
+                if isinstance(imgs, list):
+                    for im in imgs:
+                        try:
+                            if not isinstance(im, dict):
+                                continue
+                            im_type = im.get("type")
+                            if im_type in ("image_url", "image"):
+                                url = None
+                                if isinstance(im.get("image_url"), dict):
+                                    url = im["image_url"].get("url")
+                                if not url:
+                                    url = im.get("url")
+                                if url and url.startswith("data:image/"):
+                                    # Extract base64
+                                    m = re.match(r"data:image/(?:png|jpeg|webp|gif);base64,(.+)", url)
+                                    if m:
+                                        image_b64 = m.group(1)
+                                elif url:
+                                    image_url = url
+                        except Exception:
+                            continue
+
             # Some providers return a list of content parts
-            if isinstance(content, list):
+            if isinstance(content, list) and not image_url and not image_b64:
                 for part in content:
                     ptype = part.get("type")
                     if ptype in ("image_url", "image", "output_image"):
@@ -256,7 +284,12 @@ async def generate_image(prompt: str) -> Dict[str, Optional[str]]:
                         if not url:
                             url = part.get("url")
                         if url and not image_url:
-                            image_url = url
+                            if url.startswith("data:image/"):
+                                m = re.match(r"data:image/(?:png|jpeg|webp|gif);base64,(.+)", url)
+                                if m:
+                                    image_b64 = m.group(1)
+                            else:
+                                image_url = url
                         # Some providers return base64
                         b64 = part.get("image_base64") or part.get("b64_json")
                         if b64 and not image_b64:
